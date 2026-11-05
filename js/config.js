@@ -8,6 +8,9 @@ window.FORTUNELLA_CONFIG = {
   // "avg" = promedio de ambas mitades.
   halfAndHalfPrice: "max",
 
+  // Tamaño en el que se puede pedir mitad y mitad (media pizza sola = pizza chica).
+  halfAndHalfSize: "GRANDE",
+
   // Costo de envío. null = "a confirmar por WhatsApp". Un número (ej. 1500) se suma al total.
   deliveryFee: null,
 

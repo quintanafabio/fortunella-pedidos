@@ -50,7 +50,7 @@
 <footer class="footer">
   <div class="also">
     <p class="also-title">✦ También podés pedir ✦</p>
-    <p class="also-items">Mitad y mitad en pizzas · Ingredientes adicionales (aclaralo en observaciones) · Empanadas mixtas</p>
+    <p class="also-items">Mitad y mitad en pizzas grandes · Ingredientes adicionales (aclaralo en tu pedido) · Empanadas mixtas</p>
   </div>
   <div class="footer-row">
     <span class="footer-logo">Fortunella</span>
@@ -58,6 +58,13 @@
     <span class="footer-info">@fortunella.pizzas · La Rioja, Argentina</span>
   </div>
 </footer>
+
+<!-- Barra del modo mitad y mitad -->
+<div class="half-bar" id="halfBar" role="status" aria-live="polite" hidden>
+  <span class="hb-icon" aria-hidden="true">½</span>
+  <span class="hb-text"><b>Mitad y mitad · Grande</b><span id="halfBarText"></span></span>
+  <button type="button" class="hb-cancel" id="halfCancel">Cancelar</button>
+</div>
 
 <!-- Barra flotante del carrito -->
 <button class="cart-bar" id="cartBar" type="button" hidden>
@@ -81,19 +88,6 @@
       <legend>Tamaño</legend>
       <div class="pills" id="sizePills"></div>
     </fieldset>
-
-    <div class="field" id="halfField">
-      <label class="switch">
-        <input type="checkbox" id="halfToggle">
-        <span class="switch-ui" aria-hidden="true"></span>
-        <span>Mitad y mitad</span>
-      </label>
-      <div class="half-pick" id="halfPick" hidden>
-        <label for="halfSelect" class="lbl">Otra mitad</label>
-        <select id="halfSelect"></select>
-        <p class="hint" id="halfHint"></p>
-      </div>
-    </div>
 
     <fieldset class="field" id="extrasField">
       <legend>Adicionales</legend>
@@ -175,6 +169,20 @@
           <label for="addressRef" class="lbl">Referencia <span class="opt">(opcional)</span></label>
           <input id="addressRef" type="text" maxlength="120" placeholder="Entre calles, depto, color de la casa…">
         </div>
+        <div class="field loc">
+          <span class="lbl">Ubicación <span class="opt">(opcional, recomendado)</span></span>
+          <button type="button" class="btn ghost loc-btn" id="locBtn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>
+            <span>Agregar mi ubicación actual</span>
+          </button>
+          <div class="loc-ok" id="locOk" hidden>
+            <span class="loc-check" aria-hidden="true">✓</span>
+            <span class="loc-text"><b>Ubicación agregada</b><small id="locAcc"></small></span>
+            <a class="text-btn" id="locMap" href="#" target="_blank" rel="noopener">Ver mapa</a>
+            <button type="button" class="text-btn danger" id="locRemove">Quitar</button>
+          </div>
+          <p class="hint" id="locStatus">Suma un link de Google Maps al mensaje para que el repartidor llegue más fácil.</p>
+        </div>
         <p class="hint" id="feeHint"></p>
       </div>
 
@@ -228,6 +236,7 @@
     <p class="sent-icon" aria-hidden="true">✓</p>
     <h2 class="sheet-title" id="sentTitle">¡Listo! Abrimos WhatsApp</h2>
     <p class="sheet-desc">Revisá el mensaje y tocá enviar. Si WhatsApp no se abrió, probá de nuevo.</p>
+    <p class="loc-tip" id="sentLocTip" hidden>📍 <b>No te olvides de mandar tu ubicación:</b> en el chat tocá 📎 (o +) → <b>Ubicación</b> → Enviar tu ubicación actual.</p>
   </div>
   <div class="sheet-foot column">
     <a class="btn ghost" id="retryLink" href="#" target="_blank" rel="noopener">Abrir WhatsApp de nuevo</a>

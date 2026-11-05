@@ -3,9 +3,10 @@
   "use strict";
 
   const CFG = Object.assign(
-    { whatsapp: "", halfAndHalfPrice: "max", deliveryFee: null, paymentMethods: ["Efectivo", "Transferencia"] },
+    { whatsapp: "", halfAndHalfPrice: "max", halfAndHalfSize: "GRANDE", deliveryFee: null, paymentMethods: ["Efectivo", "Transferencia"] },
     window.FORTUNELLA_CONFIG || {}
   );
+  const HALF_SIZE = CFG.halfAndHalfSize;
   const STORE_KEY = "fortunella-pedido-v1";
   const nf = new Intl.NumberFormat("es-AR");
   const money = (v) => "$" + nf.format(Math.round(v));
@@ -71,7 +72,9 @@
           cat: mod.name,
           layout: mod.layout_type,
         };
-        item.halfEligible = mod.layout_type === "pizza-grid" && !item.featured && prices.length >= 2;
+        // Mitad y mitad: solo pizzas comunes que vienen en tamaño grande (no la de molde ni el box).
+        item.halfEligible = mod.layout_type === "pizza-grid" && !item.featured && prices.length >= 2 &&
+          prices.some((p) => p.label === HALF_SIZE);
         ITEMS.set(item.id, item);
         return item;
       });
@@ -102,8 +105,10 @@
   const state = {
     lines: [],
     generalNotes: "",
-    info: { name: "", mode: "", address: "", addressRef: "", when: "asap", time: "", pay: "", cash: "" },
+    info: { name: "", mode: "", address: "", addressRef: "", when: "asap", time: "", pay: "", cash: "", loc: null },
   };
+
+  let halfFirst = null; // id de la pizza elegida como primera mitad (modo mitad y mitad activo)
 
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) { /* modo privado */ }
@@ -114,11 +119,12 @@
       if (!raw) return;
       state.generalNotes = raw.generalNotes || "";
       Object.assign(state.info, raw.info || {});
+      state.info.loc = null; // la ubicación se pide de nuevo en cada visita
       state.lines = (raw.lines || []).filter((l) => {
         const it = ITEMS.get(l.itemId);
         if (!it || it.name !== l.name) return false;
         if (l.size && !it.prices.some((p) => p.label === l.size)) return false;
-        if (l.halfId && !ITEMS.get(l.halfId)) return false;
+        if (l.halfId && (!ITEMS.get(l.halfId) || l.size !== HALF_SIZE)) return false;
         return l.qty > 0;
       });
     } catch (_) { /* datos corruptos: se ignoran */ }
@@ -128,13 +134,14 @@
     const p = item.prices.find((x) => (x.label || null) === (size || null)) || item.prices[0];
     return p ? p.value : 0;
   }
+  function halfPrice(a, b) {
+    const pa = priceFor(a, HALF_SIZE);
+    const pb = priceFor(b, HALF_SIZE);
+    return CFG.halfAndHalfPrice === "avg" ? Math.ceil((pa + pb) / 2) : Math.max(pa, pb);
+  }
   function unitPrice(line) {
     const item = ITEMS.get(line.itemId);
-    let base = priceFor(item, line.size);
-    if (line.halfId) {
-      const other = priceFor(ITEMS.get(line.halfId), line.size);
-      base = CFG.halfAndHalfPrice === "avg" ? Math.ceil((base + other) / 2) : Math.max(base, other);
-    }
+    const base = line.halfId ? halfPrice(item, ITEMS.get(line.halfId)) : priceFor(item, line.size);
     const extras = (line.extras || []).reduce((s, name) => {
       const ex = item.extras.find((e) => e.name === name);
       return s + (ex ? ex.price : 0);
@@ -172,39 +179,163 @@
   const menuEl = $("#menu");
   const catsEl = $("#cats");
 
-  function priceLine(item) {
-    const node = h("p", { class: "item-prices" });
-    item.prices.forEach((p, i) => {
-      if (i) node.appendChild(h("span", { class: "sep", "aria-hidden": "true", text: "·" }));
-      node.appendChild(document.createTextNode(p.label ? `${sizeName(p.label)} ${money(p.value)}` : money(p.value)));
-    });
-    return node;
-  }
-
   function itemCard(item) {
     const compact = !item.description && item.prices.length === 1 && !item.featured;
     const card = h(
-      "button",
-      {
-        type: "button",
-        class: "item" + (item.featured ? " featured" : "") + (compact ? " compact" : ""),
-        dataset: { id: item.id },
-        "aria-label": `Agregar ${item.name}`,
-        onclick: () => openItem(item.id),
-      },
-      h(
-        "span",
-        { class: "item-main" },
-        h("span", { class: "item-name" }, item.featured ? `✦ ${item.name} ✦` : item.name,
-          item.note ? h("span", { class: "item-note", text: " " + item.note }) : null,
-          item.extras.length ? h("span", { class: "item-note", text: " " + item.extras.map((e) => `+ ${e.name} ${money(e.price)}`).join(" ") }) : null),
-        item.description ? h("span", { class: "item-desc", text: item.description }) : null,
-        priceLine(item)
+      "article",
+      { class: "item" + (item.featured ? " featured" : "") + (compact ? " compact" : ""), dataset: { id: item.id } },
+      h("div", { class: "item-main" },
+        h("h3", { class: "item-name" }, item.featured ? `✦ ${item.name} ✦` : item.name,
+          item.note ? h("span", { class: "item-note", text: " " + item.note }) : null),
+        item.description ? h("p", { class: "item-desc", text: item.description }) : null,
+        compact ? h("p", { class: "item-prices", text: money(item.prices[0].value) }) : null
       ),
-      h("span", { class: "item-add", "aria-hidden": "true", text: "+" })
+      h("div", { class: "item-actions" }),
+      h("p", { class: "item-halves", hidden: true })
     );
+    renderActions(card, item);
     return card;
   }
+
+  /* Botones de cada tarjeta: agregar por tamaño, contador, mitad y mitad */
+  const extrasPick = new Map(); // itemId → Set de adicionales tildados en la tarjeta
+  const plainLines = (id, size) => state.lines.filter((l) => l.itemId === id && !l.halfId && (l.size || null) === (size || null));
+
+  function renderActions(card, item = ITEMS.get(card.dataset.id)) {
+    const box = $(".item-actions", card);
+    const halvesEl = $(".item-halves", card);
+    const compact = card.classList.contains("compact");
+    box.textContent = "";
+    card.classList.remove("dim", "half-first");
+    card.inert = false;
+    card.classList.toggle("in-cart", !halfFirst && state.lines.some((l) => l.itemId === item.id || l.halfId === item.id));
+
+    if (halfFirst) {
+      halvesEl.hidden = true;
+      if (item.id === halfFirst) {
+        card.classList.add("half-first");
+        box.appendChild(h("div", { class: "half-chosen" },
+          h("span", { text: "✓ Primera mitad" }),
+          h("button", { type: "button", class: "text-btn", text: "Cancelar", onclick: cancelHalf })));
+      } else if (item.halfEligible) {
+        box.appendChild(h("button", { type: "button", class: "pick-btn", onclick: () => pickHalf(item),
+          "aria-label": `Elegir ${item.name} como otra mitad, total ${money(halfPrice(ITEMS.get(halfFirst), item))}` },
+          h("span", { text: "Elegir como otra mitad" }),
+          h("b", { text: money(halfPrice(ITEMS.get(halfFirst), item)) })));
+      } else {
+        card.classList.add("dim");
+        card.inert = true;
+      }
+      return;
+    }
+
+    item.prices.forEach((p) => {
+      const size = p.label || null;
+      const n = plainLines(item.id, size).reduce((s, l) => s + l.qty, 0);
+      const label = size ? sizeName(size) : compact ? "" : "Agregar";
+      const what = item.name + (size ? " " + sizeName(size) : "");
+      if (n > 0) {
+        box.appendChild(h("div", { class: "qty-group", role: "group", "aria-label": `${what}: ${n} en tu pedido` },
+          h("button", { type: "button", "aria-label": `Restar un ${what}`, text: "−", onclick: () => quickRemove(item, size) }),
+          h("span", { class: "qg-label" }, h("b", { text: String(n) }), label ? h("small", { text: label }) : null),
+          h("button", { type: "button", "aria-label": `Sumar un ${what}`, text: "+", onclick: () => quickAdd(item, size) })));
+      } else {
+        box.appendChild(h("button", { type: "button", class: "add-btn", "aria-label": `Agregar ${what}, ${money(p.value)}`, onclick: () => quickAdd(item, size) },
+          h("span", { class: "ab-size", text: "+ " + label }),
+          compact ? null : h("span", { class: "ab-price", text: money(p.value) })));
+      }
+    });
+
+    if (item.halfEligible) {
+      box.appendChild(h("button", { type: "button", class: "half-btn", "aria-label": `Pedir mitad y mitad ${sizeName(HALF_SIZE).toLowerCase()} con ${item.name}`, onclick: () => startHalf(item) },
+        h("span", { class: "ab-size", text: "½ y ½" }),
+        h("span", { class: "ab-price", text: sizeName(HALF_SIZE) })));
+    }
+
+    if (item.extras.length) {
+      const picked = extrasPick.get(item.id) || new Set();
+      const wrap = h("div", { class: "extra-chips" });
+      item.extras.forEach((ex) => {
+        wrap.appendChild(h("label", { class: "chip-check" },
+          h("input", { type: "checkbox", checked: picked.has(ex.name), onchange: (e) => {
+            const set = extrasPick.get(item.id) || new Set();
+            if (e.target.checked) set.add(ex.name); else set.delete(ex.name);
+            extrasPick.set(item.id, set);
+          } }),
+          h("span", { text: `Con ${ex.name} +${money(ex.price)}` })));
+      });
+      box.appendChild(wrap);
+    }
+
+    const halves = state.lines.filter((l) => l.halfId && (l.itemId === item.id || l.halfId === item.id));
+    halvesEl.hidden = !halves.length;
+    halvesEl.textContent = halves.length
+      ? "En tu pedido: " + halves.map((l) => `½ y ½ con ${ITEMS.get(l.itemId === item.id ? l.halfId : l.itemId).name}${l.qty > 1 ? ` (×${l.qty})` : ""}`).join(" · ")
+      : "";
+  }
+
+  function refreshCards() {
+    $$(".item", menuEl).forEach((c) => renderActions(c));
+  }
+
+  function afterAdd(line, msg) {
+    const key = lineKey(line);
+    changed();
+    bumpBar();
+    toast(msg, { label: "Aclarar", fn: () => {
+      const idx = state.lines.findIndex((l) => lineKey(l) === key);
+      if (idx >= 0) openItem(state.lines[idx].itemId, idx);
+    } });
+  }
+
+  function quickAdd(item, size) {
+    const extras = Array.from(extrasPick.get(item.id) || []);
+    const line = { itemId: item.id, name: item.name, size, halfId: null, extras, notes: "", qty: 1 };
+    addLine(line);
+    afterAdd(line, `Agregaste ${item.name}${size ? " " + sizeName(size).toLowerCase() : ""}${extras.length ? " con " + extras.join(", ") : ""}`);
+  }
+
+  function quickRemove(item, size) {
+    const lines = plainLines(item.id, size);
+    const last = lines[lines.length - 1];
+    if (!last) return;
+    if (last.qty > 1) last.qty--;
+    else state.lines.splice(state.lines.indexOf(last), 1);
+    changed();
+  }
+
+  /* Mitad y mitad: se elige la primera mitad y después la otra desde la carta */
+  const halfBar = $("#halfBar");
+
+  function startHalf(item) {
+    halfFirst = item.id;
+    document.body.classList.add("half-mode");
+    $("#halfBarText").textContent = `½ ${item.name} + ½ … elegí la otra mitad en la carta`;
+    halfBar.hidden = false;
+    refreshCards();
+    updateBar();
+  }
+
+  function cancelHalf() {
+    const id = halfFirst;
+    halfFirst = null;
+    document.body.classList.remove("half-mode");
+    halfBar.hidden = true;
+    refreshCards();
+    updateBar();
+    const card = id && menuEl.querySelector(`.item[data-id="${id}"] .half-btn`);
+    if (card) card.focus({ preventScroll: true });
+  }
+
+  function pickHalf(item) {
+    const first = ITEMS.get(halfFirst);
+    const line = { itemId: first.id, name: first.name, size: HALF_SIZE, halfId: item.id, extras: [], notes: "", qty: 1 };
+    cancelHalf();
+    addLine(line);
+    afterAdd(line, `Agregaste ½ ${first.name} + ½ ${item.name}`);
+  }
+
+  $("#halfCancel").addEventListener("click", cancelHalf);
 
   function renderMenu() {
     menuEl.textContent = "";
@@ -233,7 +364,6 @@
     });
     menuEl.appendChild(h("p", { class: "no-results", id: "noResults", hidden: true, text: "No encontramos nada con ese nombre." }));
     setupScrollSpy();
-    refreshBadges();
   }
 
   function goTo(id) {
@@ -291,24 +421,6 @@
     $("#noResults").hidden = any;
   }
 
-  function refreshBadges() {
-    const counts = {};
-    state.lines.forEach((l) => {
-      counts[l.itemId] = (counts[l.itemId] || 0) + l.qty;
-      if (l.halfId) counts[l.halfId] = counts[l.halfId] || 0;
-    });
-    $$(".item", menuEl).forEach((card) => {
-      const n = counts[card.dataset.id] || 0;
-      card.classList.toggle("in-cart", n > 0);
-      let b = $(".item-badge", card);
-      if (n > 0) {
-        if (!b) { b = h("span", { class: "item-badge" }); card.appendChild(b); }
-        b.textContent = n;
-        b.setAttribute("aria-label", `${n} en tu pedido`);
-      } else if (b) b.remove();
-    });
-  }
-
   /* ───────────────────── DIÁLOGOS ───────────────────── */
 
   const scrim = $("#scrim");
@@ -340,7 +452,9 @@
   }
   scrim.addEventListener("click", closeTop);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && stack.length) { e.preventDefault(); closeTop(); }
+    if (e.key !== "Escape") return;
+    if (stack.length) { e.preventDefault(); closeTop(); }
+    else if (halfFirst) { e.preventDefault(); cancelHalf(); }
   });
   document.addEventListener("click", (e) => {
     if (e.target.closest("[data-close]")) closeTop();
@@ -349,43 +463,41 @@
   /* ───────────────────── HOJA DE PRODUCTO ───────────────────── */
 
   const sheet = $("#itemSheet");
-  const sheetState = { item: null, editIndex: -1, qty: 1, size: null };
+  const sheetState = { item: null, editIndex: -1, qty: 1, size: null, halfId: null };
 
   function openItem(itemId, editIndex = -1) {
     const item = ITEMS.get(itemId);
     const line = editIndex >= 0 ? state.lines[editIndex] : null;
+    const half = line && line.halfId ? ITEMS.get(line.halfId) : null;
     sheetState.item = item;
     sheetState.editIndex = editIndex;
     sheetState.qty = line ? line.qty : 1;
+    sheetState.halfId = half ? half.id : null;
 
     $("#sheetCat").textContent = item.cat + (item.subgroup ? " · " + item.subgroup : "");
-    $("#sheetTitle").textContent = item.name;
-    $("#sheetDesc").textContent = item.description;
-    $("#sheetDesc").hidden = !item.description;
+    $("#sheetTitle").textContent = half ? `½ ${item.name} + ½ ${half.name}` : item.name;
+    $("#sheetDesc").textContent = half
+      ? `Mitad y mitad ${sizeName(HALF_SIZE).toLowerCase()}. ` + (CFG.halfAndHalfPrice === "avg" ? "Se cobra el promedio de las dos mitades." : "Se cobra el precio de la mitad más cara.")
+      : item.description;
+    $("#sheetDesc").hidden = !half && !item.description;
 
-    // Tamaños
+    // Tamaños (una mitad y mitad siempre es grande)
     const pills = $("#sizePills");
     pills.textContent = "";
-    const multi = item.prices.length > 1;
+    const multi = item.prices.length > 1 && !half;
     $("#sizeField").hidden = !multi;
     $("#sizeField legend").textContent = item.layout === "emp-table" ? "Presentación" : "Tamaño";
     const preferred = line ? line.size : (item.prices.find((p) => p.label === "GRANDE") || item.prices[0] || {}).label || null;
-    sheetState.size = multi ? preferred : (item.prices[0] && item.prices[0].label) || null;
+    sheetState.size = half ? HALF_SIZE : multi ? preferred : (item.prices[0] && item.prices[0].label) || null;
     if (multi) {
       item.prices.forEach((p) => {
         pills.appendChild(h("label", { class: "pill" },
           h("input", { type: "radio", name: "size", value: p.label, checked: p.label === sheetState.size,
-            onchange: () => { sheetState.size = p.label; buildHalfOptions(); updateSheetPrice(); } }),
+            onchange: () => { sheetState.size = p.label; updateSheetPrice(); } }),
           h("span", null, sizeName(p.label), h("small", { text: money(p.value) }))
         ));
       });
     }
-
-    // Mitad y mitad
-    $("#halfField").hidden = !item.halfEligible;
-    $("#halfToggle").checked = !!(line && line.halfId);
-    $("#halfPick").hidden = !$("#halfToggle").checked;
-    buildHalfOptions(line && line.halfId);
 
     // Adicionales
     const extras = $("#extrasList");
@@ -406,32 +518,13 @@
     sheet.querySelector(".sheet-body").scrollTop = 0;
   }
 
-  function buildHalfOptions(selectedId) {
-    const item = sheetState.item;
-    if (!item || !item.halfEligible) return;
-    const sel = $("#halfSelect");
-    const keep = selectedId || sel.value;
-    sel.textContent = "";
-    const size = sheetState.size;
-    for (const it of ITEMS.values()) {
-      if (!it.halfEligible || it.id === item.id) continue;
-      const p = it.prices.find((x) => x.label === size);
-      if (!p) continue;
-      sel.appendChild(h("option", { value: it.id, text: `${it.name} — ${money(p.value)}`, selected: it.id === keep }));
-    }
-    $("#halfHint").textContent = CFG.halfAndHalfPrice === "avg"
-      ? "Se cobra el promedio de las dos mitades."
-      : "Se cobra el precio de la mitad más cara.";
-  }
-
   function readSheetLine() {
     const item = sheetState.item;
-    const half = item.halfEligible && $("#halfToggle").checked ? $("#halfSelect").value || null : null;
     return {
       itemId: item.id,
       name: item.name,
       size: sheetState.size,
-      halfId: half,
+      halfId: sheetState.halfId,
       extras: $$("#extrasList input:checked").map((i) => i.value),
       notes: $("#itemNotes").value.trim(),
       qty: sheetState.qty,
@@ -446,8 +539,6 @@
 
   $("#qtyMinus").addEventListener("click", () => { sheetState.qty = Math.max(1, sheetState.qty - 1); updateSheetPrice(); });
   $("#qtyPlus").addEventListener("click", () => { sheetState.qty = Math.min(99, sheetState.qty + 1); updateSheetPrice(); });
-  $("#halfToggle").addEventListener("change", (e) => { $("#halfPick").hidden = !e.target.checked; updateSheetPrice(); });
-  $("#halfSelect").addEventListener("change", updateSheetPrice);
 
   $("#addBtn").addEventListener("click", () => {
     const line = readSheetLine();
@@ -463,6 +554,7 @@
       bumpBar();
     }
     changed();
+    if (sheetState.editIndex >= 0 && drawer.hidden) toast("Aclaración guardada");
   });
 
   /* ───────────────────── BARRA + TOAST ───────────────────── */
@@ -472,7 +564,7 @@
 
   function updateBar() {
     const n = itemCount();
-    bar.hidden = n === 0;
+    bar.hidden = n === 0 || !!halfFirst;
     $("#cartBarCount").textContent = n;
     $("#cartBarTotal").textContent = money(subtotal());
     bar.setAttribute("aria-label", `Ver mi pedido: ${n} ${n === 1 ? "producto" : "productos"}, ${money(subtotal())}`);
@@ -483,18 +575,27 @@
     bar.classList.add("bump");
   }
   let toastTimer;
-  function toast(msg) {
+  // Aviso breve; con `action` muestra un botón (ej. "Aclarar") y dura un poco más.
+  function toast(msg, action) {
     const t = $("#toast");
-    t.textContent = "✓ " + msg;
+    t.textContent = "";
+    t.appendChild(h("span", { class: "toast-msg", text: "✓ " + msg }));
+    if (action) {
+      t.appendChild(h("button", { type: "button", class: "toast-btn", text: action.label, onclick: () => {
+        t.classList.remove("show");
+        action.fn();
+      } }));
+    }
+    t.classList.toggle("has-action", !!action);
     t.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+    toastTimer = setTimeout(() => t.classList.remove("show"), action ? 4500 : 2200);
   }
 
   function changed() {
     save();
     updateBar();
-    refreshBadges();
+    refreshCards();
     updateTotals();
   }
 
@@ -606,6 +707,62 @@
     });
   })();
 
+  /* Ubicación (GPS del navegador → link de Google Maps en el mensaje) */
+  const mapsUrl = (loc) => `https://maps.google.com/?q=${loc.lat},${loc.lng}`;
+  const LOC_HINT = "Suma un link de Google Maps al mensaje para que el repartidor llegue más fácil.";
+
+  function renderLoc(message, warn) {
+    const loc = state.info.loc;
+    $("#locBtn").hidden = !!loc;
+    $("#locOk").hidden = !loc;
+    if (loc) {
+      $("#locAcc").textContent = loc.acc ? `Precisión aproximada: ${loc.acc} m` : "";
+      $("#locMap").href = mapsUrl(loc);
+    }
+    const status = $("#locStatus");
+    status.textContent = message || (loc ? "Se va a incluir en el mensaje de WhatsApp." : LOC_HINT);
+    status.classList.toggle("warn", !!warn);
+  }
+
+  $("#locBtn").addEventListener("click", () => {
+    const btn = $("#locBtn");
+    if (!("geolocation" in navigator)) {
+      renderLoc("Tu navegador no permite compartir la ubicación. Podés mandarla desde WhatsApp (📎 → Ubicación).", true);
+      return;
+    }
+    btn.setAttribute("aria-busy", "true");
+    btn.lastElementChild.textContent = "Buscando tu ubicación…";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        btn.removeAttribute("aria-busy");
+        btn.lastElementChild.textContent = "Agregar mi ubicación actual";
+        state.info.loc = {
+          lat: pos.coords.latitude.toFixed(6),
+          lng: pos.coords.longitude.toFixed(6),
+          acc: Math.round(pos.coords.accuracy || 0),
+        };
+        save();
+        renderLoc();
+      },
+      (err) => {
+        btn.removeAttribute("aria-busy");
+        btn.lastElementChild.textContent = "Reintentar ubicación";
+        const msg = err.code === 1
+          ? "No diste permiso para usar la ubicación. Podés habilitarlo en el navegador o mandarla desde WhatsApp (📎 → Ubicación)."
+          : "No pudimos obtener tu ubicación. Probá de nuevo o mandala desde WhatsApp (📎 → Ubicación).";
+        renderLoc(msg, true);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+    );
+  });
+
+  $("#locRemove").addEventListener("click", () => {
+    state.info.loc = null;
+    save();
+    renderLoc();
+    $("#locBtn").focus();
+  });
+
   function defaultPickupTime() {
     const d = new Date(Date.now() + 40 * 60000);
     const mins = Math.ceil(d.getMinutes() / 15) * 15;
@@ -624,6 +781,7 @@
     $$('input[name="when"]', form).forEach((r) => (r.checked = r.value === (i.when || "asap")));
     $$('input[name="pay"]', form).forEach((r) => (r.checked = r.value === i.pay));
     syncDeliveryUI();
+    renderLoc();
     $$(".invalid", form).forEach((n) => n.classList.remove("invalid"));
     $("#feeHint").textContent = hasFeeConfigured()
       ? `El envío cuesta ${money(CFG.deliveryFee)} y se suma al total.`
@@ -729,6 +887,7 @@
     if (i.mode === "delivery") {
       add("Dirección", i.address);
       add("Referencia", i.addressRef);
+      add("Ubicación", i.loc ? "Link de Google Maps incluido" : "La mandás por WhatsApp");
       add("Envío", hasFee() ? money(CFG.deliveryFee) : "A confirmar");
     } else {
       add("Horario", whenText());
@@ -762,6 +921,8 @@
       L.push("🛵 *Delivery*");
       L.push(`Dirección: ${i.address}`);
       if (i.addressRef) L.push(`Referencia: ${i.addressRef}`);
+      if (i.loc) L.push(`📍 Ubicación: ${mapsUrl(i.loc)}`);
+      else L.push("📍 _Te comparto mi ubicación a continuación._");
     } else {
       L.push("🏠 *Retiro en el local*");
       L.push(`Horario: ${whenText()}`);
@@ -782,6 +943,7 @@
   function send() {
     const url = waUrl();
     $("#retryLink").href = url;
+    $("#sentLocTip").hidden = !(state.info.mode === "delivery" && !state.info.loc);
     const w = window.open(url, "_blank", "noopener");
     if (!w) window.location.href = url;
     openDialog($("#sentSheet"));
