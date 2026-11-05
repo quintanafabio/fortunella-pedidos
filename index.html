@@ -149,7 +149,7 @@
         <div class="choice-grid">
           <label class="choice">
             <input type="radio" name="mode" value="delivery">
-            <span class="choice-ui"><b>Delivery</b><small>Te lo llevamos</small></span>
+            <span class="choice-ui"><b>Delivery</b><small>Te lo llevamos · ubicación por WhatsApp</small></span>
           </label>
           <label class="choice">
             <input type="radio" name="mode" value="pickup">
@@ -160,28 +160,16 @@
       </fieldset>
 
       <div class="mode-panel" data-mode="delivery" hidden>
-        <div class="field">
-          <label for="address" class="lbl">Dirección</label>
-          <input id="address" type="text" autocomplete="street-address" maxlength="120" placeholder="Calle, número, barrio">
-          <p class="error" data-error-for="address">Necesitamos la dirección para el envío.</p>
-        </div>
-        <div class="field">
-          <label for="addressRef" class="lbl">Referencia <span class="opt">(opcional)</span></label>
-          <input id="addressRef" type="text" maxlength="120" placeholder="Entre calles, depto, color de la casa…">
-        </div>
-        <div class="field loc">
-          <span class="lbl">Ubicación <span class="opt">(opcional, recomendado)</span></span>
-          <button type="button" class="btn ghost loc-btn" id="locBtn">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>
-            <span>Agregar mi ubicación actual</span>
-          </button>
-          <div class="loc-ok" id="locOk" hidden>
-            <span class="loc-check" aria-hidden="true">✓</span>
-            <span class="loc-text"><b>Ubicación agregada</b><small id="locAcc"></small></span>
-            <a class="text-btn" id="locMap" href="#" target="_blank" rel="noopener">Ver mapa</a>
-            <button type="button" class="text-btn danger" id="locRemove">Quitar</button>
+        <div class="notice">
+          <span class="notice-icon" aria-hidden="true">📍</span>
+          <div>
+            <b>La ubicación la mandás por WhatsApp</b>
+            <p>No hace falta cargar la dirección. Después de enviar el pedido, en el mismo chat tocá <b>📎 (o +) → Ubicación → Enviar tu ubicación actual</b>.</p>
           </div>
-          <p class="hint" id="locStatus">Suma un link de Google Maps al mensaje para que el repartidor llegue más fácil.</p>
+        </div>
+        <div class="field">
+          <label for="addressRef" class="lbl">Indicaciones para el repartidor <span class="opt">(opcional)</span></label>
+          <input id="addressRef" type="text" maxlength="120" placeholder="Depto, piso, timbre, color de la casa…">
         </div>
         <p class="hint" id="feeHint"></p>
       </div>
@@ -217,7 +205,7 @@
     <!-- Paso 3 -->
     <div class="step" data-panel="review">
       <div class="review" id="review"></div>
-      <p class="hint center">Al tocar “Enviar pedido” se abre WhatsApp con el mensaje listo. Solo tenés que enviarlo.</p>
+      <p class="hint center" id="reviewHint">Al tocar “Enviar pedido” se abre WhatsApp con el mensaje listo. Solo tenés que enviarlo.</p>
     </div>
   </div>
 
@@ -236,7 +224,13 @@
     <p class="sent-icon" aria-hidden="true">✓</p>
     <h2 class="sheet-title" id="sentTitle">¡Listo! Abrimos WhatsApp</h2>
     <p class="sheet-desc">Revisá el mensaje y tocá enviar. Si WhatsApp no se abrió, probá de nuevo.</p>
-    <p class="loc-tip" id="sentLocTip" hidden>📍 <b>No te olvides de mandar tu ubicación:</b> en el chat tocá 📎 (o +) → <b>Ubicación</b> → Enviar tu ubicación actual.</p>
+    <div class="notice" id="sentLocTip" hidden>
+      <span class="notice-icon" aria-hidden="true">📍</span>
+      <div>
+        <b>Ahora mandanos tu ubicación</b>
+        <p>Después de enviar el mensaje, en el mismo chat tocá <b>📎 (o +) → Ubicación → Enviar tu ubicación actual</b>. Sin la ubicación no podemos despachar el pedido.</p>
+      </div>
+    </div>
   </div>
   <div class="sheet-foot column">
     <a class="btn ghost" id="retryLink" href="#" target="_blank" rel="noopener">Abrir WhatsApp de nuevo</a>

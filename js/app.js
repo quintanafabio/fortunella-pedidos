@@ -105,7 +105,7 @@
   const state = {
     lines: [],
     generalNotes: "",
-    info: { name: "", mode: "", address: "", addressRef: "", when: "asap", time: "", pay: "", cash: "", loc: null },
+    info: { name: "", mode: "", addressRef: "", when: "asap", time: "", pay: "", cash: "" },
   };
 
   let halfFirst = null; // id de la pizza elegida como primera mitad (modo mitad y mitad activo)
@@ -118,8 +118,7 @@
       const raw = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
       if (!raw) return;
       state.generalNotes = raw.generalNotes || "";
-      Object.assign(state.info, raw.info || {});
-      state.info.loc = null; // la ubicación se pide de nuevo en cada visita
+      for (const k of Object.keys(state.info)) if (raw.info && raw.info[k] != null) state.info[k] = raw.info[k];
       state.lines = (raw.lines || []).filter((l) => {
         const it = ITEMS.get(l.itemId);
         if (!it || it.name !== l.name) return false;
@@ -607,6 +606,7 @@
   let step = "cart";
 
   function openDrawer(s) {
+    $("#toast").classList.remove("show");
     setStep(s || "cart");
     openDialog(drawer);
   }
@@ -707,62 +707,6 @@
     });
   })();
 
-  /* Ubicación (GPS del navegador → link de Google Maps en el mensaje) */
-  const mapsUrl = (loc) => `https://maps.google.com/?q=${loc.lat},${loc.lng}`;
-  const LOC_HINT = "Suma un link de Google Maps al mensaje para que el repartidor llegue más fácil.";
-
-  function renderLoc(message, warn) {
-    const loc = state.info.loc;
-    $("#locBtn").hidden = !!loc;
-    $("#locOk").hidden = !loc;
-    if (loc) {
-      $("#locAcc").textContent = loc.acc ? `Precisión aproximada: ${loc.acc} m` : "";
-      $("#locMap").href = mapsUrl(loc);
-    }
-    const status = $("#locStatus");
-    status.textContent = message || (loc ? "Se va a incluir en el mensaje de WhatsApp." : LOC_HINT);
-    status.classList.toggle("warn", !!warn);
-  }
-
-  $("#locBtn").addEventListener("click", () => {
-    const btn = $("#locBtn");
-    if (!("geolocation" in navigator)) {
-      renderLoc("Tu navegador no permite compartir la ubicación. Podés mandarla desde WhatsApp (📎 → Ubicación).", true);
-      return;
-    }
-    btn.setAttribute("aria-busy", "true");
-    btn.lastElementChild.textContent = "Buscando tu ubicación…";
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        btn.removeAttribute("aria-busy");
-        btn.lastElementChild.textContent = "Agregar mi ubicación actual";
-        state.info.loc = {
-          lat: pos.coords.latitude.toFixed(6),
-          lng: pos.coords.longitude.toFixed(6),
-          acc: Math.round(pos.coords.accuracy || 0),
-        };
-        save();
-        renderLoc();
-      },
-      (err) => {
-        btn.removeAttribute("aria-busy");
-        btn.lastElementChild.textContent = "Reintentar ubicación";
-        const msg = err.code === 1
-          ? "No diste permiso para usar la ubicación. Podés habilitarlo en el navegador o mandarla desde WhatsApp (📎 → Ubicación)."
-          : "No pudimos obtener tu ubicación. Probá de nuevo o mandala desde WhatsApp (📎 → Ubicación).";
-        renderLoc(msg, true);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
-    );
-  });
-
-  $("#locRemove").addEventListener("click", () => {
-    state.info.loc = null;
-    save();
-    renderLoc();
-    $("#locBtn").focus();
-  });
-
   function defaultPickupTime() {
     const d = new Date(Date.now() + 40 * 60000);
     const mins = Math.ceil(d.getMinutes() / 15) * 15;
@@ -773,7 +717,6 @@
   function fillDeliveryForm() {
     const i = state.info;
     $("#custName").value = i.name;
-    $("#address").value = i.address;
     $("#addressRef").value = i.addressRef;
     $("#pickupTime").value = i.time || defaultPickupTime();
     $("#cashAmount").value = i.cash ? money(Number(i.cash)) : "";
@@ -781,7 +724,6 @@
     $$('input[name="when"]', form).forEach((r) => (r.checked = r.value === (i.when || "asap")));
     $$('input[name="pay"]', form).forEach((r) => (r.checked = r.value === i.pay));
     syncDeliveryUI();
-    renderLoc();
     $$(".invalid", form).forEach((n) => n.classList.remove("invalid"));
     $("#feeHint").textContent = hasFeeConfigured()
       ? `El envío cuesta ${money(CFG.deliveryFee)} y se suma al total.`
@@ -793,7 +735,6 @@
     const i = state.info;
     i.name = $("#custName").value.trim();
     i.mode = (form.querySelector('input[name="mode"]:checked') || {}).value || "";
-    i.address = $("#address").value.trim();
     i.addressRef = $("#addressRef").value.trim();
     i.when = (form.querySelector('input[name="when"]:checked') || {}).value || "asap";
     i.time = $("#pickupTime").value;
@@ -841,7 +782,6 @@
     };
     mark("custName", i.name.length >= 2);
     mark("mode", !!i.mode);
-    if (i.mode === "delivery") mark("address", i.address.length >= 4);
     if (i.mode === "pickup" && i.when === "time") mark("pickupTime", /^\d{2}:\d{2}$/.test(i.time));
     if (bad.length) {
       bad[0].scrollIntoView({ block: "center", behavior: "smooth" });
@@ -885,9 +825,8 @@
     add("A nombre de", i.name);
     add("Entrega", i.mode === "delivery" ? "Delivery" : "Retiro en el local");
     if (i.mode === "delivery") {
-      add("Dirección", i.address);
-      add("Referencia", i.addressRef);
-      add("Ubicación", i.loc ? "Link de Google Maps incluido" : "La mandás por WhatsApp");
+      add("Ubicación", "La mandás por WhatsApp después del pedido");
+      add("Indicaciones", i.addressRef);
       add("Envío", hasFee() ? money(CFG.deliveryFee) : "A confirmar");
     } else {
       add("Horario", whenText());
@@ -899,6 +838,10 @@
       r.appendChild(h("div", { class: "review-block" }, h("h3", null, "Comentario", editBtn("cart")),
         h("p", { text: state.generalNotes.trim() })));
     }
+
+    $("#reviewHint").textContent = i.mode === "delivery"
+      ? "Al tocar “Enviar pedido” se abre WhatsApp con el mensaje listo. Envialo y después mandanos tu ubicación en el mismo chat."
+      : "Al tocar “Enviar pedido” se abre WhatsApp con el mensaje listo. Solo tenés que enviarlo.";
   }
 
   function buildMessage() {
@@ -919,10 +862,8 @@
     L.push("");
     if (i.mode === "delivery") {
       L.push("🛵 *Delivery*");
-      L.push(`Dirección: ${i.address}`);
-      if (i.addressRef) L.push(`Referencia: ${i.addressRef}`);
-      if (i.loc) L.push(`📍 Ubicación: ${mapsUrl(i.loc)}`);
-      else L.push("📍 _Te comparto mi ubicación a continuación._");
+      if (i.addressRef) L.push(`Indicaciones: ${i.addressRef}`);
+      L.push("📍 _Te comparto mi ubicación a continuación._");
     } else {
       L.push("🏠 *Retiro en el local*");
       L.push(`Horario: ${whenText()}`);
@@ -943,7 +884,7 @@
   function send() {
     const url = waUrl();
     $("#retryLink").href = url;
-    $("#sentLocTip").hidden = !(state.info.mode === "delivery" && !state.info.loc);
+    $("#sentLocTip").hidden = state.info.mode !== "delivery";
     const w = window.open(url, "_blank", "noopener");
     if (!w) window.location.href = url;
     openDialog($("#sentSheet"));
