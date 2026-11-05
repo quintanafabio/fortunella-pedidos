@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0F2560">
+<meta name="description" content="Carta de Fortunella Pizzas, La Rioja. Armá tu pedido y envialo por WhatsApp.">
+<title>Fortunella Pizzas — Pedí online</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Bebas+Neue&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-text">
+      <h1 class="hero-name">
+        <svg class="leaf left" viewBox="0 0 24 38" aria-hidden="true"><g transform="rotate(-12 12 38)"><path d="M12 36 C11 28 10 18 13 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M12 31 C5 30 1 23 5 18 C8 23 10 28 12 31Z"/><path d="M12 31 C18 28 20 22 17 17 C14 22 13 27 12 31Z"/><path d="M12 23 C5 21 2 14 6 10 C9 15 11 20 12 23Z"/><path d="M12 23 C18 20 21 14 17 10 C14 15 13 20 12 23Z"/><path d="M13 15 C7 13 5 7 9 4 C11 8 12 12 13 15Z"/><path d="M13 15 C18 12 19 6 16 4 C13 8 13 12 13 15Z"/><path d="M13 5 C10 2 11 0 13 0 C15 0 15 2 13 5Z"/></g></svg>Fortunella<svg class="leaf right" viewBox="0 0 24 38" aria-hidden="true"><g transform="rotate(12 12 38)"><path d="M12 36 C13 28 14 18 11 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M12 31 C5 28 3 22 7 17 C10 22 11 27 12 31Z"/><path d="M12 31 C19 30 23 23 19 18 C16 23 14 28 12 31Z"/><path d="M12 23 C6 20 3 14 7 10 C10 15 11 20 12 23Z"/><path d="M12 23 C18 21 21 14 18 10 C15 15 13 20 12 23Z"/><path d="M11 15 C6 12 5 6 8 4 C10 8 11 12 11 15Z"/><path d="M11 15 C17 13 19 7 16 4 C14 8 12 12 11 15Z"/><path d="M11 5 C9 2 9 0 11 0 C13 0 13 2 11 5Z"/></g></svg>
+      </h1>
+      <div class="hero-sub">Pizzas</div>
+      <div class="hero-est">La Rioja, Argentina · Est. 2020</div>
+      <ul class="facts">
+        <li><b>Masa madre</b><span>24 h de fermentación</span></li>
+        <li><b>Horno de barro</b><span>Cocción a 400°</span></li>
+        <li><b>Ingredientes frescos</b><span>Productores locales</span></li>
+      </ul>
+    </div>
+    <img class="hero-pizza" src="img/pizza.png" alt="" width="520" height="603">
+  </div>
+  <div class="banner">
+    <p class="banner-title">Menú Noche a la Carta</p>
+    <p class="banner-sub">Armá tu pedido · Delivery o retiro · Lo enviás por WhatsApp</p>
+  </div>
+</header>
+
+<nav class="cats" aria-label="Categorías">
+  <div class="cats-scroll" id="cats"></div>
+  <label class="search">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="search" type="search" placeholder="Buscar en la carta" autocomplete="off" aria-label="Buscar en la carta">
+  </label>
+</nav>
+
+<main id="menu" class="menu" aria-live="polite">
+  <p class="loading">Cargando carta…</p>
+</main>
+
+<footer class="footer">
+  <div class="also">
+    <p class="also-title">✦ También podés pedir ✦</p>
+    <p class="also-items">Mitad y mitad en pizzas · Ingredientes adicionales (aclaralo en observaciones) · Empanadas mixtas</p>
+  </div>
+  <div class="footer-row">
+    <span class="footer-logo">Fortunella</span>
+    <span class="footer-buen">¡buen provecho!</span>
+    <span class="footer-info">@fortunella.pizzas · La Rioja, Argentina</span>
+  </div>
+</footer>
+
+<!-- Barra flotante del carrito -->
+<button class="cart-bar" id="cartBar" type="button" hidden>
+  <span class="cart-bar-count" id="cartBarCount">0</span>
+  <span class="cart-bar-label">Ver mi pedido</span>
+  <span class="cart-bar-total" id="cartBarTotal">$0</span>
+</button>
+
+<div class="scrim" id="scrim" hidden></div>
+
+<!-- Hoja para agregar un producto -->
+<section class="sheet" id="itemSheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <div class="sheet-grip" aria-hidden="true"></div>
+  <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">×</button>
+  <div class="sheet-body">
+    <p class="sheet-cat" id="sheetCat"></p>
+    <h2 class="sheet-title" id="sheetTitle"></h2>
+    <p class="sheet-desc" id="sheetDesc"></p>
+
+    <fieldset class="field" id="sizeField">
+      <legend>Tamaño</legend>
+      <div class="pills" id="sizePills"></div>
+    </fieldset>
+
+    <div class="field" id="halfField">
+      <label class="switch">
+        <input type="checkbox" id="halfToggle">
+        <span class="switch-ui" aria-hidden="true"></span>
+        <span>Mitad y mitad</span>
+      </label>
+      <div class="half-pick" id="halfPick" hidden>
+        <label for="halfSelect" class="lbl">Otra mitad</label>
+        <select id="halfSelect"></select>
+        <p class="hint" id="halfHint"></p>
+      </div>
+    </div>
+
+    <fieldset class="field" id="extrasField">
+      <legend>Adicionales</legend>
+      <div id="extrasList"></div>
+    </fieldset>
+
+    <div class="field">
+      <label for="itemNotes" class="lbl">Observaciones <span class="opt">(opcional)</span></label>
+      <textarea id="itemNotes" rows="2" maxlength="200" placeholder="Ej: sin aceitunas, bien cocida, sin cebolla…"></textarea>
+    </div>
+  </div>
+  <div class="sheet-foot">
+    <div class="stepper" role="group" aria-label="Cantidad">
+      <button type="button" id="qtyMinus" aria-label="Restar uno">−</button>
+      <output id="qtyOut" aria-live="polite">1</output>
+      <button type="button" id="qtyPlus" aria-label="Sumar uno">+</button>
+    </div>
+    <button class="btn primary grow" type="button" id="addBtn">Agregar <span id="addPrice"></span></button>
+  </div>
+</section>
+
+<!-- Panel del pedido: carrito → entrega → resumen -->
+<section class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+  <header class="drawer-head">
+    <button class="icon-btn" type="button" id="drawerBack" aria-label="Volver">‹</button>
+    <h2 id="drawerTitle">Tu pedido</h2>
+    <button class="icon-btn" type="button" data-close aria-label="Cerrar">×</button>
+  </header>
+  <ol class="steps" aria-label="Pasos">
+    <li data-step="cart">Pedido</li>
+    <li data-step="delivery">Entrega</li>
+    <li data-step="review">Confirmar</li>
+  </ol>
+
+  <div class="drawer-body">
+    <!-- Paso 1 -->
+    <div class="step" data-panel="cart">
+      <ul class="lines" id="lines"></ul>
+      <div class="empty" id="emptyCart">
+        <p>Tu pedido está vacío.</p>
+        <button class="btn ghost" type="button" data-close>Ver la carta</button>
+      </div>
+      <div class="field" id="generalNotesField">
+        <label for="generalNotes" class="lbl">Comentario general <span class="opt">(opcional)</span></label>
+        <textarea id="generalNotes" rows="2" maxlength="300" placeholder="Algo que quieras aclarar sobre todo el pedido"></textarea>
+      </div>
+    </div>
+
+    <!-- Paso 2 -->
+    <form class="step" data-panel="delivery" id="deliveryForm" novalidate>
+      <div class="field">
+        <label for="custName" class="lbl">Pedido a nombre de</label>
+        <input id="custName" name="name" type="text" autocomplete="name" maxlength="60" placeholder="Tu nombre" required>
+        <p class="error" data-error-for="custName">Contanos a nombre de quién va el pedido.</p>
+      </div>
+
+      <fieldset class="field">
+        <legend>¿Cómo lo querés?</legend>
+        <div class="choice-grid">
+          <label class="choice">
+            <input type="radio" name="mode" value="delivery">
+            <span class="choice-ui"><b>Delivery</b><small>Te lo llevamos</small></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="mode" value="pickup">
+            <span class="choice-ui"><b>Retiro en el local</b><small>Pasás a buscarlo</small></span>
+          </label>
+        </div>
+        <p class="error" data-error-for="mode">Elegí delivery o retiro.</p>
+      </fieldset>
+
+      <div class="mode-panel" data-mode="delivery" hidden>
+        <div class="field">
+          <label for="address" class="lbl">Dirección</label>
+          <input id="address" type="text" autocomplete="street-address" maxlength="120" placeholder="Calle, número, barrio">
+          <p class="error" data-error-for="address">Necesitamos la dirección para el envío.</p>
+        </div>
+        <div class="field">
+          <label for="addressRef" class="lbl">Referencia <span class="opt">(opcional)</span></label>
+          <input id="addressRef" type="text" maxlength="120" placeholder="Entre calles, depto, color de la casa…">
+        </div>
+        <p class="hint" id="feeHint"></p>
+      </div>
+
+      <div class="mode-panel" data-mode="pickup" hidden>
+        <fieldset class="field">
+          <legend>¿Cuándo pasás?</legend>
+          <label class="radio-row">
+            <input type="radio" name="when" value="asap" checked>
+            <span>Que el local me avise cuándo está listo</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="when" value="time">
+            <span>A un horario específico</span>
+          </label>
+          <div class="time-pick" id="timePick" hidden>
+            <input id="pickupTime" type="time" step="900" aria-label="Horario de retiro">
+            <p class="error" data-error-for="pickupTime">Elegí un horario.</p>
+          </div>
+        </fieldset>
+      </div>
+
+      <fieldset class="field">
+        <legend>Forma de pago</legend>
+        <div class="pills" id="payPills"></div>
+        <div class="cash" id="cashField" hidden>
+          <label for="cashAmount" class="lbl">¿Con cuánto abonás? <span class="opt">(opcional, para el vuelto)</span></label>
+          <input id="cashAmount" type="text" inputmode="numeric" maxlength="10" placeholder="$">
+        </div>
+      </fieldset>
+    </form>
+
+    <!-- Paso 3 -->
+    <div class="step" data-panel="review">
+      <div class="review" id="review"></div>
+      <p class="hint center">Al tocar “Enviar pedido” se abre WhatsApp con el mensaje listo. Solo tenés que enviarlo.</p>
+    </div>
+  </div>
+
+  <footer class="drawer-foot">
+    <div class="totals">
+      <span>Total</span>
+      <strong id="drawerTotal">$0</strong>
+    </div>
+    <button class="btn primary" type="button" id="nextBtn">Continuar</button>
+  </footer>
+</section>
+
+<!-- Confirmación después de abrir WhatsApp -->
+<section class="sheet small" id="sentSheet" role="dialog" aria-modal="true" aria-labelledby="sentTitle" hidden>
+  <div class="sheet-body center">
+    <p class="sent-icon" aria-hidden="true">✓</p>
+    <h2 class="sheet-title" id="sentTitle">¡Listo! Abrimos WhatsApp</h2>
+    <p class="sheet-desc">Revisá el mensaje y tocá enviar. Si WhatsApp no se abrió, probá de nuevo.</p>
+  </div>
+  <div class="sheet-foot column">
+    <a class="btn ghost" id="retryLink" href="#" target="_blank" rel="noopener">Abrir WhatsApp de nuevo</a>
+    <button class="btn primary" type="button" id="newOrderBtn">Empezar un pedido nuevo</button>
+    <button class="btn link" type="button" data-close>Volver a mi pedido</button>
+  </div>
+</section>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/config.js"></script>
+<script src="data/menu.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
