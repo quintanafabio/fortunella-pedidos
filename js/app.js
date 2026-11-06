@@ -119,14 +119,17 @@
       if (!raw) return;
       state.generalNotes = raw.generalNotes || "";
       for (const k of Object.keys(state.info)) if (raw.info && raw.info[k] != null) state.info[k] = raw.info[k];
-      state.lines = (raw.lines || []).filter((l) => {
-        const it = ITEMS.get(l.itemId);
-        if (!it || it.name !== l.name) return false;
-        if (l.size && !it.prices.some((p) => p.label === l.size)) return false;
-        if (l.halfId && (!ITEMS.get(l.halfId) || l.size !== HALF_SIZE)) return false;
-        return l.qty > 0;
-      });
+      state.lines = (raw.lines || []).filter(validLine);
     } catch (_) { /* datos corruptos: se ignoran */ }
+  }
+
+  // Una línea guardada sigue siendo válida si el producto, el tamaño y la mitad todavía existen en la carta.
+  function validLine(l) {
+    const it = l && ITEMS.get(l.itemId);
+    if (!it || it.name !== l.name) return false;
+    if (l.size && !it.prices.some((p) => p.label === l.size)) return false;
+    if (l.halfId && (!ITEMS.get(l.halfId) || l.size !== HALF_SIZE)) return false;
+    return l.qty > 0;
   }
 
   function priceFor(item, size) {
@@ -596,7 +599,177 @@
     updateBar();
     refreshCards();
     updateTotals();
+    renderAgain();
   }
+
+  /* ───────────────────── HORARIOS ───────────────────── */
+
+  const WEEK = 7 * 1440;
+  const DAY_NAMES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+  const toMin = (s) => { const [hh, mm] = s.split(":").map(Number); return hh * 60 + mm; };
+  const hhmm = (min) => {
+    const m = ((min % 1440) + 1440) % 1440;
+    return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+  };
+
+  // Turnos como intervalos en "minutos desde el domingo 00:00".
+  const SHIFTS = [];
+  (CFG.hours || []).forEach((s) => s.days.forEach((d) => {
+    const start = d * 1440 + toMin(s.open);
+    let end = d * 1440 + toMin(s.close);
+    if (end <= start) end += 1440; // cierra después de medianoche
+    SHIFTS.push({ start, end });
+  }));
+  const hasHours = SHIFTS.length > 0;
+
+  // Minuto actual de la semana en la hora del local (aunque el teléfono esté en otra zona horaria).
+  function weekNow() {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: CFG.timeZone || undefined, weekday: "short", hour: "numeric", minute: "numeric", hourCycle: "h23",
+      }).formatToParts(new Date());
+      const get = (type) => parts.find((p) => p.type === type).value;
+      const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday"));
+      return day * 1440 + (Number(get("hour")) % 24) * 60 + Number(get("minute"));
+    } catch (_) {
+      const d = new Date();
+      return d.getDay() * 1440 + d.getHours() * 60 + d.getMinutes();
+    }
+  }
+
+  function currentShift(t) {
+    for (const s of SHIFTS) {
+      for (const off of [0, -WEEK]) { // -WEEK: turno del sábado que sigue abierto el domingo de madrugada
+        if (t >= s.start + off && t < s.end + off) return { start: s.start + off, end: s.end + off };
+      }
+    }
+    return null;
+  }
+  function nextShift(t) {
+    let best = null;
+    for (const s of SHIFTS) {
+      for (const off of [0, WEEK]) {
+        const start = s.start + off;
+        if (start > t && (!best || start < best.start)) best = { start, end: s.end + off };
+      }
+    }
+    return best;
+  }
+  function dayLabel(min, t) {
+    const diff = Math.floor(min / 1440) - Math.floor(t / 1440);
+    if (diff === 0) return "hoy";
+    if (diff === 1) return "mañana";
+    return "el " + DAY_NAMES[Math.floor(min / 1440) % 7];
+  }
+
+  // { open, soon, closesAt } o { open: false, opensAt }; null si no hay horarios cargados.
+  function storeState() {
+    if (!hasHours) return null;
+    const t = weekNow();
+    const cur = currentShift(t);
+    if (cur) return { open: true, soon: cur.end - t <= 45, closesAt: hhmm(cur.end), t };
+    const nx = nextShift(t);
+    return { open: false, opensAt: `${dayLabel(nx.start, t)} a las ${hhmm(nx.start)}`, t };
+  }
+
+  function renderStatus() {
+    const el = $("#storeStatus");
+    const st = storeState();
+    if (!st) { el.hidden = true; return; }
+    el.hidden = false;
+    el.className = "status " + (st.open ? (st.soon ? "soon" : "open") : "closed");
+    el.textContent = st.open
+      ? (st.soon ? `Cierra pronto · a las ${st.closesAt}` : `Abierto ahora · hasta las ${st.closesAt}`)
+      : `Cerrado · abrimos ${st.opensAt}`;
+    const notice = $("#closedNotice");
+    notice.hidden = st.open;
+    if (!st.open) $("#closedText").textContent = `Abrimos ${st.opensAt}. Podés enviar tu pedido igual: lo preparamos cuando abramos.`;
+  }
+
+  // Horarios de retiro cada 15 min dentro del turno actual o el próximo.
+  function pickupSlots() {
+    const lead = CFG.pickupLeadMinutes || 30;
+    const round = (m) => Math.ceil(m / 15) * 15;
+    const t = weekNow();
+    if (!hasHours) {
+      const out = [];
+      for (let m = round(t + lead), n = 0; n < 16; m += 15, n++) out.push(hhmm(m));
+      return { slots: out, note: "" };
+    }
+    let shift = currentShift(t);
+    let from = shift ? round(t + lead) : 0;
+    let note = "";
+    if (!shift || from > shift.end - 15) {
+      const closingSoon = !!shift;
+      shift = nextShift(t);
+      from = round(shift.start + lead);
+      note = `${closingSoon ? "Estamos por cerrar" : "Ahora estamos cerrados"}: estos horarios son para cuando abramos (${dayLabel(shift.start, t)} a las ${hhmm(shift.start)}).`;
+    }
+    const day = dayLabel(shift.start, t);
+    const prefix = shift.start > t && day !== "hoy" ? day + " " : "";
+    const slots = [];
+    for (let m = from; m <= shift.end - 15; m += 15) slots.push(prefix + hhmm(m));
+    return { slots, note };
+  }
+
+  (function renderStoreInfo() {
+    const list = $("#footerHours");
+    (CFG.hours || []).forEach((s) => list.appendChild(h("li", null, h("b", { text: s.label }), ` ${s.open} a ${s.close} hs`)));
+    const store = CFG.store || {};
+    const map = $("#footerMap");
+    const link = $("#storeLink");
+    if (store.address) {
+      map.textContent = store.address + (store.mapsUrl ? " · Ver en el mapa" : "");
+      $("#storeAddress").textContent = store.address;
+    }
+    if (store.mapsUrl) { map.href = store.mapsUrl; link.href = store.mapsUrl; }
+    else { map.removeAttribute("href"); link.removeAttribute("href"); }
+    link.hidden = !store.address;
+    renderStatus();
+    setInterval(renderStatus, 60000);
+  })();
+
+  /* ───────────────────── REPETIR EL ÚLTIMO PEDIDO ───────────────────── */
+
+  const LAST_KEY = "fortunella-ultimo-pedido-v1";
+  let againDismissed = false;
+
+  function saveLastOrder() {
+    try {
+      localStorage.setItem(LAST_KEY, JSON.stringify({ at: Date.now(), lines: state.lines.map((l) => ({ ...l })) }));
+    } catch (_) { /* sin almacenamiento */ }
+  }
+  function loadLastOrder() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LAST_KEY) || "null");
+      if (!raw || !Array.isArray(raw.lines)) return null;
+      const lines = raw.lines.filter(validLine);
+      return lines.length ? { at: raw.at, lines } : null;
+    } catch (_) { return null; }
+  }
+
+  function renderAgain() {
+    const card = $("#againCard");
+    const last = !againDismissed && state.lines.length === 0 ? loadLastOrder() : null;
+    card.hidden = !last;
+    if (!last) return;
+    const names = last.lines.map((l) => `${l.qty}× ${lineTitle(l)}${l.size && !l.halfId ? " " + sizeName(l.size).toLowerCase() : ""}`);
+    const shown = names.slice(0, 4).join(" · ") + (names.length > 4 ? ` y ${names.length - 4} más` : "");
+    let when = "";
+    try { when = new Date(last.at).toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "numeric" }); } catch (_) { /* fecha opcional */ }
+    $("#againItems").textContent = (when ? `Tu pedido del ${when}: ` : "") + shown;
+    $("#againTotal").textContent = money(last.lines.reduce((s, l) => s + lineTotal(l), 0));
+  }
+
+  $("#againBtn").addEventListener("click", () => {
+    const last = loadLastOrder();
+    if (!last) return;
+    last.lines.forEach((l) => addLine({ ...l }));
+    againDismissed = true;
+    changed();
+    openDrawer("cart");
+  });
+  $("#againClose").addEventListener("click", () => { againDismissed = true; renderAgain(); });
 
   /* ───────────────────── PANEL DEL PEDIDO ───────────────────── */
 
@@ -625,6 +798,7 @@
     if (s === "cart") renderCart();
     if (s === "delivery") fillDeliveryForm();
     if (s === "review") renderReview();
+    renderStatus();
     updateTotals();
     $(".drawer-body", drawer).scrollTop = 0;
   }
@@ -683,6 +857,35 @@
         )
       ));
     });
+    renderUpsell();
+  }
+
+  // "¿Le sumás algo?": sugerencias de categorías (bebidas, postres) que todavía no están en el pedido.
+  function renderUpsell() {
+    const box = $("#upsell");
+    const list = $("#upsellList");
+    list.textContent = "";
+    const inCart = new Set(state.lines.map((l) => ITEMS.get(l.itemId).cat));
+    const all = Array.from(ITEMS.values());
+    const candidates = (CFG.suggestions || [])
+      .map((name) => all.find((it) => it.name === name))
+      .filter((it) => it && !inCart.has(it.cat));
+    // Alternar categorías: si faltan bebida y postre, mostrar de las dos.
+    const byCat = new Map();
+    candidates.forEach((it) => { if (!byCat.has(it.cat)) byCat.set(it.cat, []); byCat.get(it.cat).push(it); });
+    const picks = [];
+    for (let round = 0; picks.length < 3 && round < 5; round++) {
+      for (const group of byCat.values()) if (group[round] && picks.length < 3) picks.push(group[round]);
+    }
+    box.hidden = !state.lines.length || !picks.length;
+    picks.forEach((it) => {
+      const size = (it.prices[0] && it.prices[0].label) || null;
+      list.appendChild(h("button", { type: "button", class: "upsell-item", "aria-label": `Agregar ${it.name}, ${money(priceFor(it, size))}`,
+        onclick: () => { quickAdd(it, size); renderCart(); } },
+        h("span", { class: "ui-name", text: it.name }),
+        h("span", { class: "ui-price", text: money(priceFor(it, size)) }),
+        h("span", { class: "ui-add", "aria-hidden": "true", text: "+" })));
+    });
   }
 
   function removeLine(idx) {
@@ -707,18 +910,57 @@
     });
   })();
 
-  function defaultPickupTime() {
-    const d = new Date(Date.now() + 40 * 60000);
-    const mins = Math.ceil(d.getMinutes() / 15) * 15;
-    d.setMinutes(mins, 0, 0);
-    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  // Datos de transferencia
+  (function setupTransfer() {
+    const tr = CFG.transfer;
+    if (!tr) return;
+    $("#trAlias").textContent = tr.alias;
+    const dl = $("#trData");
+    [["Titular", tr.holder], ["CUIT/CUIL", tr.cuit], ["Cuenta", tr.bank]].forEach(([k, v]) => {
+      if (v) dl.append(h("dt", { text: k }), h("dd", { text: v }));
+    });
+    const btn = $("#trCopy");
+    btn.addEventListener("click", async () => {
+      let ok = false;
+      try { await navigator.clipboard.writeText(tr.alias); ok = true; } catch (_) {
+        const range = document.createRange();
+        range.selectNodeContents($("#trAlias"));
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        ok = document.execCommand && document.execCommand("copy");
+      }
+      btn.textContent = ok ? "¡Copiado!" : "Copialo a mano";
+      btn.classList.toggle("done", ok);
+      setTimeout(() => { btn.textContent = "Copiar"; btn.classList.remove("done"); }, 2200);
+    });
+  })();
+
+  function transferText(forSent) {
+    const tr = CFG.transfer;
+    if (!tr) return "";
+    const waitFee = state.info.mode === "delivery" && !hasFee();
+    if (waitFee) return `Esperá que te confirmemos el total con el envío y transferí al alias ${tr.alias}. Después mandá el comprobante por el chat.`;
+    return forSent
+      ? `Transferí ${money(total())} al alias ${tr.alias} (${tr.bank}, a nombre de ${tr.holder}) y mandá el comprobante por el chat.`
+      : "Mandá el comprobante por WhatsApp después de enviar el pedido.";
+  }
+
+  function fillPickupTimes() {
+    const sel = $("#pickupTime");
+    const { slots, note } = pickupSlots();
+    sel.textContent = "";
+    slots.forEach((s) => sel.appendChild(h("option", { value: s, text: s.charAt(0).toUpperCase() + s.slice(1) + " hs" })));
+    if (slots.includes(state.info.time)) sel.value = state.info.time;
+    $("#pickupHint").textContent = note;
+    $("#pickupHint").hidden = !note;
   }
 
   function fillDeliveryForm() {
     const i = state.info;
     $("#custName").value = i.name;
     $("#addressRef").value = i.addressRef;
-    $("#pickupTime").value = i.time || defaultPickupTime();
+    fillPickupTimes();
     $("#cashAmount").value = i.cash ? money(Number(i.cash)) : "";
     $$('input[name="mode"]', form).forEach((r) => (r.checked = r.value === i.mode));
     $$('input[name="when"]', form).forEach((r) => (r.checked = r.value === (i.when || "asap")));
@@ -749,6 +991,11 @@
     $("#timePick").hidden = when !== "time";
     const pay = (form.querySelector('input[name="pay"]:checked') || {}).value;
     $("#cashField").hidden = pay !== "Efectivo";
+    $("#transferField").hidden = pay !== "Transferencia" || !CFG.transfer;
+    if (pay === "Transferencia") {
+      state.info.mode = mode || "";
+      $("#trHint").textContent = transferText(false);
+    }
   }
 
   form.addEventListener("change", (e) => {
@@ -782,7 +1029,7 @@
     };
     mark("custName", i.name.length >= 2);
     mark("mode", !!i.mode);
-    if (i.mode === "pickup" && i.when === "time") mark("pickupTime", /^\d{2}:\d{2}$/.test(i.time));
+    if (i.mode === "pickup" && i.when === "time") mark("pickupTime", !!i.time);
     if (bad.length) {
       bad[0].scrollIntoView({ block: "center", behavior: "smooth" });
       const input = bad[0].querySelector("input");
@@ -831,7 +1078,7 @@
     } else {
       add("Horario", whenText());
     }
-    add("Pago", i.pay ? i.pay + (i.pay === "Efectivo" && i.cash ? ` (abona con ${money(Number(i.cash))})` : "") : "A coordinar");
+    add("Pago", payText());
     r.appendChild(h("div", { class: "review-block" }, h("h3", null, "Entrega", editBtn("delivery")), kv));
 
     if (state.generalNotes.trim()) {
@@ -844,11 +1091,21 @@
       : "Al tocar “Enviar pedido” se abre WhatsApp con el mensaje listo. Solo tenés que enviarlo.";
   }
 
+  function payText() {
+    const i = state.info;
+    if (!i.pay) return "A coordinar";
+    if (i.pay === "Efectivo" && i.cash) return `Efectivo (abona con ${money(Number(i.cash))})`;
+    if (i.pay === "Transferencia" && CFG.transfer) return `Transferencia al alias ${CFG.transfer.alias}`;
+    return i.pay;
+  }
+
   function buildMessage() {
     const i = state.info;
     const L = [];
+    const st = storeState();
     L.push("🍕 *NUEVO PEDIDO · FORTUNELLA*");
     L.push(`A nombre de: *${i.name}*`);
+    if (st && !st.open) L.push("⏰ _Pedido hecho con el local cerrado, para cuando abran._");
     L.push("");
     L.push("*Detalle*");
     state.lines.forEach((l) => {
@@ -869,7 +1126,9 @@
       L.push(`Horario: ${whenText()}`);
     }
     L.push("");
-    L.push(`💵 Pago: ${i.pay || "a coordinar"}${i.pay === "Efectivo" && i.cash ? ` (abono con ${money(Number(i.cash))})` : ""}`);
+    if (i.pay === "Efectivo") L.push(`💵 Pago: Efectivo${i.cash ? ` (abono con ${money(Number(i.cash))})` : ""}`);
+    else if (i.pay === "Transferencia") L.push("💵 Pago: Transferencia (te mando el comprobante)");
+    else L.push(`💵 Pago: ${i.pay || "a coordinar"}`);
     if (state.generalNotes.trim()) {
       L.push("");
       L.push(`📝 Comentario: ${state.generalNotes.trim()}`);
@@ -885,6 +1144,10 @@
     const url = waUrl();
     $("#retryLink").href = url;
     $("#sentLocTip").hidden = state.info.mode !== "delivery";
+    const isTransfer = state.info.pay === "Transferencia" && !!CFG.transfer;
+    $("#sentPayTip").hidden = !isTransfer;
+    if (isTransfer) $("#sentPayText").textContent = transferText(true);
+    saveLastOrder();
     const w = window.open(url, "_blank", "noopener");
     if (!w) window.location.href = url;
     openDialog($("#sentSheet"));
@@ -901,6 +1164,7 @@
   $("#newOrderBtn").addEventListener("click", () => {
     state.lines = [];
     state.generalNotes = "";
+    againDismissed = true; // recién lo envió: no ofrecer repetirlo enseguida
     changed();
     while (stack.length) closeTop();
     toast("Listo, podés armar un pedido nuevo");
@@ -908,7 +1172,7 @@
   });
 
   // Exponer para pruebas desde la consola.
-  window.Fortunella = { buildMessage, waUrl, state };
+  window.Fortunella = { buildMessage, waUrl, state, storeState, pickupSlots };
 
   /* ───────────────────── INICIO ───────────────────── */
 
@@ -920,6 +1184,7 @@
       restore();
       renderMenu();
       updateBar();
+      renderAgain();
     })
     .catch((e) => {
       console.error(e);

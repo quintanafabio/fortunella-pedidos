@@ -21,6 +21,7 @@
       </h1>
       <div class="hero-sub">Pizzas</div>
       <div class="hero-est">La Rioja, Argentina · Est. 2020</div>
+      <p class="status" id="storeStatus" hidden></p>
       <ul class="facts">
         <li><b>Masa madre</b><span>24 h de fermentación</span></li>
         <li><b>Horno de barro</b><span>Cocción a 400°</span></li>
@@ -43,6 +44,16 @@
   </label>
 </nav>
 
+<!-- Repetir el último pedido -->
+<section class="again" id="againCard" aria-labelledby="againTitle" hidden>
+  <div class="again-head">
+    <h2 id="againTitle">¿Lo mismo que la última vez?</h2>
+    <button type="button" class="icon-btn" id="againClose" aria-label="Ocultar">×</button>
+  </div>
+  <p class="again-items" id="againItems"></p>
+  <button type="button" class="btn primary" id="againBtn">Pedir lo mismo · <span id="againTotal"></span></button>
+</section>
+
 <main id="menu" class="menu" aria-live="polite">
   <p class="loading">Cargando carta…</p>
 </main>
@@ -51,6 +62,16 @@
   <div class="also">
     <p class="also-title">✦ También podés pedir ✦</p>
     <p class="also-items">Mitad y mitad en pizzas grandes · Ingredientes adicionales (aclaralo en tu pedido) · Empanadas mixtas</p>
+  </div>
+  <div class="footer-info-grid">
+    <div>
+      <p class="fi-title">Horarios</p>
+      <ul class="fi-hours" id="footerHours"></ul>
+    </div>
+    <div>
+      <p class="fi-title">Dónde estamos</p>
+      <a class="fi-map" id="footerMap" href="#" target="_blank" rel="noopener"></a>
+    </div>
   </div>
   <div class="footer-row">
     <span class="footer-logo">Fortunella</span>
@@ -123,9 +144,17 @@
   </ol>
 
   <div class="drawer-body">
+    <div class="notice closed" id="closedNotice" hidden>
+      <span class="notice-icon" aria-hidden="true">🌙</span>
+      <div><b>Ahora estamos cerrados</b><p id="closedText"></p></div>
+    </div>
     <!-- Paso 1 -->
     <div class="step" data-panel="cart">
       <ul class="lines" id="lines"></ul>
+      <section class="upsell" id="upsell" aria-labelledby="upsellTitle" hidden>
+        <h3 id="upsellTitle">¿Le sumás algo?</h3>
+        <div class="upsell-list" id="upsellList"></div>
+      </section>
       <div class="empty" id="emptyCart">
         <p>Tu pedido está vacío.</p>
         <button class="btn ghost" type="button" data-close>Ver la carta</button>
@@ -175,6 +204,11 @@
       </div>
 
       <div class="mode-panel" data-mode="pickup" hidden>
+        <a class="store-link" id="storeLink" href="#" target="_blank" rel="noopener">
+          <span class="notice-icon" aria-hidden="true">📍</span>
+          <span><b>Retirás en</b><span id="storeAddress"></span></span>
+          <span class="store-link-cta">Ver mapa</span>
+        </a>
         <fieldset class="field">
           <legend>¿Cuándo pasás?</legend>
           <label class="radio-row">
@@ -186,7 +220,8 @@
             <span>A un horario específico</span>
           </label>
           <div class="time-pick" id="timePick" hidden>
-            <input id="pickupTime" type="time" step="900" aria-label="Horario de retiro">
+            <select id="pickupTime" aria-label="Horario de retiro"></select>
+            <p class="hint" id="pickupHint"></p>
             <p class="error" data-error-for="pickupTime">Elegí un horario.</p>
           </div>
         </fieldset>
@@ -198,6 +233,15 @@
         <div class="cash" id="cashField" hidden>
           <label for="cashAmount" class="lbl">¿Con cuánto abonás? <span class="opt">(opcional, para el vuelto)</span></label>
           <input id="cashAmount" type="text" inputmode="numeric" maxlength="10" placeholder="$">
+        </div>
+        <div class="transfer" id="transferField" hidden>
+          <p class="transfer-title">Datos para transferir</p>
+          <div class="transfer-alias">
+            <span><small>Alias</small><b id="trAlias"></b></span>
+            <button type="button" class="copy-btn" id="trCopy">Copiar</button>
+          </div>
+          <dl class="transfer-kv" id="trData"></dl>
+          <p class="hint" id="trHint"></p>
         </div>
       </fieldset>
     </form>
@@ -230,6 +274,10 @@
         <b>Ahora mandanos tu ubicación</b>
         <p>Después de enviar el mensaje, en el mismo chat tocá <b>📎 (o +) → Ubicación → Enviar tu ubicación actual</b>. Sin la ubicación no podemos despachar el pedido.</p>
       </div>
+    </div>
+    <div class="notice" id="sentPayTip" hidden>
+      <span class="notice-icon" aria-hidden="true">💸</span>
+      <div><b>Transferencia</b><p id="sentPayText"></p></div>
     </div>
   </div>
   <div class="sheet-foot column">
