@@ -105,7 +105,7 @@
   const state = {
     lines: [],
     generalNotes: "",
-    info: { name: "", mode: "", addressRef: "", when: "asap", time: "", pay: "", cash: "" },
+    info: { name: "", mode: "", addressRef: "", when: "", time: "", pay: "", cash: "" },
   };
 
   let halfFirst = null; // id de la pizza elegida como primera mitad (modo mitad y mitad activo)
@@ -427,11 +427,11 @@
 
   const scrim = $("#scrim");
   const stack = [];
-  const Z = { itemSheet: 56, drawer: 50, sentSheet: 58 };
+  const Z = { itemSheet: 56, upsellSheet: 56, drawer: 50, sentSheet: 58 };
 
-  function openDialog(el) {
+  function openDialog(el, onClose) {
     if (stack.some((s) => s.el === el)) return;
-    stack.push({ el, returnTo: document.activeElement });
+    stack.push({ el, returnTo: document.activeElement, onClose });
     el.hidden = false;
     el.style.zIndex = Z[el.id];
     scrim.hidden = false;
@@ -451,6 +451,7 @@
       document.body.classList.remove("locked");
     }
     if (top.returnTo && document.contains(top.returnTo)) top.returnTo.focus({ preventScroll: true });
+    if (top.onClose) top.onClose();
   }
   scrim.addEventListener("click", closeTop);
   document.addEventListener("keydown", (e) => {
@@ -591,7 +592,7 @@
     t.classList.toggle("has-action", !!action);
     t.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove("show"), action ? 4500 : 2200);
+    toastTimer = setTimeout(() => t.classList.remove("show"), action ? action.ms || 4500 : 2200);
   }
 
   function changed() {
@@ -683,7 +684,7 @@
       : `Cerrado · abrimos ${st.opensAt}`;
     const notice = $("#closedNotice");
     notice.hidden = st.open;
-    if (!st.open) $("#closedText").textContent = `Abrimos ${st.opensAt}. Podés enviar tu pedido igual: lo preparamos cuando abramos.`;
+    if (!st.open) $("#closedText").textContent = `Abrimos ${st.opensAt}. Podés pedir igual y lo preparamos al abrir.`;
   }
 
   // Horarios de retiro cada 15 min dentro del turno actual o el próximo.
@@ -827,6 +828,7 @@
     else if (step === "delivery") btn.textContent = "Revisar pedido";
     else btn.innerHTML = WA_ICON + "<span>Enviar pedido</span>";
     btn.disabled = state.lines.length === 0;
+    updateMissing();
   }
 
   function renderCart() {
@@ -835,6 +837,9 @@
     const empty = state.lines.length === 0;
     $("#emptyCart").hidden = !empty;
     $("#generalNotesField").hidden = empty;
+    $("#clearCart").hidden = empty;
+    $("#clearAsk").hidden = false;
+    $("#clearConfirm").hidden = true;
     $("#generalNotes").value = state.generalNotes;
     state.lines.forEach((l, idx) => {
       const meta = lineMeta(l);
@@ -857,14 +862,16 @@
         )
       ));
     });
-    renderUpsell();
   }
 
-  // "¿Le sumás algo?": sugerencias de categorías (bebidas, postres) que todavía no están en el pedido.
-  function renderUpsell() {
-    const box = $("#upsell");
-    const list = $("#upsellList");
-    list.textContent = "";
+  /* "¿Le sumás algo?": paso entre Entrega y Confirmar, una vez por pedido.
+     Sugiere productos de categorías (bebidas, postres) que todavía no están en el pedido. */
+  const upsellSheet = $("#upsellSheet");
+  let upsellShown = false;
+  let upsellPicks = [];
+  let upsellStartCount = 0;
+
+  function suggestionPicks() {
     const inCart = new Set(state.lines.map((l) => ITEMS.get(l.itemId).cat));
     const all = Array.from(ITEMS.values());
     const candidates = (CFG.suggestions || [])
@@ -877,16 +884,50 @@
     for (let round = 0; picks.length < 3 && round < 5; round++) {
       for (const group of byCat.values()) if (group[round] && picks.length < 3) picks.push(group[round]);
     }
-    box.hidden = !state.lines.length || !picks.length;
-    picks.forEach((it) => {
-      const size = (it.prices[0] && it.prices[0].label) || null;
-      list.appendChild(h("button", { type: "button", class: "upsell-item", "aria-label": `Agregar ${it.name}, ${money(priceFor(it, size))}`,
-        onclick: () => { quickAdd(it, size); renderCart(); } },
-        h("span", { class: "ui-name", text: it.name }),
-        h("span", { class: "ui-price", text: money(priceFor(it, size)) }),
-        h("span", { class: "ui-add", "aria-hidden": "true", text: "+" })));
-    });
+    return picks;
   }
+
+  function openUpsell() {
+    upsellPicks = suggestionPicks();
+    if (!upsellPicks.length) return false;
+    upsellShown = true;
+    upsellStartCount = itemCount();
+    const cats = new Set(upsellPicks.map((it) => it.cat));
+    $("#upsellDesc").textContent = cats.size > 1
+      ? "¿Una bebida o un postre para acompañar?"
+      : upsellPicks[0].layout === "postre-cards" ? "¿Un postre para cerrar?" : "¿Algo para tomar?";
+    renderUpsellRows();
+    openDialog(upsellSheet, () => setStep("review"));
+    return true;
+  }
+
+  function renderUpsellRows() {
+    const list = $("#upsellList");
+    list.textContent = "";
+    upsellPicks.forEach((it) => {
+      const size = (it.prices[0] && it.prices[0].label) || null;
+      const n = plainLines(it.id, size).reduce((s, l) => s + l.qty, 0);
+      const add = () => {
+        addLine({ itemId: it.id, name: it.name, size, halfId: null, extras: [], notes: "", qty: 1 });
+        changed();
+        renderUpsellRows();
+      };
+      list.appendChild(h("div", { class: "upsell-row" + (n ? " added" : "") },
+        h("span", { class: "ur-text" }, h("b", { text: it.name }), h("span", { class: "ur-price", text: money(priceFor(it, size)) })),
+        n > 0
+          ? h("div", { class: "qty-group", role: "group", "aria-label": `${it.name}: ${n} en tu pedido` },
+              h("button", { type: "button", "aria-label": `Restar un ${it.name}`, text: "−", onclick: () => { quickRemove(it, size); renderUpsellRows(); } }),
+              h("span", { class: "qg-label" }, h("b", { text: String(n) })),
+              h("button", { type: "button", "aria-label": `Sumar un ${it.name}`, text: "+", onclick: add }))
+          : h("button", { type: "button", class: "add-btn", "aria-label": `Agregar ${it.name}, ${money(priceFor(it, size))}`, onclick: add },
+              h("span", { class: "ab-size", text: "+ Agregar" }))
+      ));
+    });
+    $("#upsellTotal").textContent = money(total());
+    $("#upsellNext").textContent = itemCount() > upsellStartCount ? "Continuar" : "No, gracias";
+  }
+
+  $("#upsellNext").addEventListener("click", closeTop);
 
   function removeLine(idx) {
     const [l] = state.lines.splice(idx, 1);
@@ -896,6 +937,36 @@
   }
 
   $("#generalNotes").addEventListener("input", (e) => { state.generalNotes = e.target.value; save(); });
+
+  // Vaciar carrito: pide confirmación y deja deshacer.
+  function clearCart() {
+    const snapshot = { lines: state.lines.map((l) => ({ ...l })), generalNotes: state.generalNotes };
+    state.lines = [];
+    state.generalNotes = "";
+    upsellShown = false; // en el próximo pedido se vuelve a sugerir
+    return snapshot;
+  }
+  function restoreCart(snapshot) {
+    state.lines = snapshot.lines.map((l) => ({ ...l }));
+    state.generalNotes = snapshot.generalNotes;
+    changed();
+  }
+  $("#clearAsk").addEventListener("click", () => {
+    $("#clearAsk").hidden = true;
+    $("#clearConfirm").hidden = false;
+    $("#clearNo").focus();
+  });
+  $("#clearNo").addEventListener("click", () => {
+    $("#clearConfirm").hidden = true;
+    $("#clearAsk").hidden = false;
+    $("#clearAsk").focus();
+  });
+  $("#clearYes").addEventListener("click", () => {
+    const snapshot = clearCart();
+    changed();
+    renderCart();
+    toast("Vaciaste el carrito", { label: "Deshacer", ms: 8000, fn: () => { restoreCart(snapshot); renderCart(); } });
+  });
 
   /* Paso 2: entrega */
   const form = $("#deliveryForm");
@@ -963,7 +1034,7 @@
     fillPickupTimes();
     $("#cashAmount").value = i.cash ? money(Number(i.cash)) : "";
     $$('input[name="mode"]', form).forEach((r) => (r.checked = r.value === i.mode));
-    $$('input[name="when"]', form).forEach((r) => (r.checked = r.value === (i.when || "asap")));
+    $$('input[name="when"]', form).forEach((r) => (r.checked = r.value === i.when));
     $$('input[name="pay"]', form).forEach((r) => (r.checked = r.value === i.pay));
     syncDeliveryUI();
     $$(".invalid", form).forEach((n) => n.classList.remove("invalid"));
@@ -978,7 +1049,7 @@
     i.name = $("#custName").value.trim();
     i.mode = (form.querySelector('input[name="mode"]:checked') || {}).value || "";
     i.addressRef = $("#addressRef").value.trim();
-    i.when = (form.querySelector('input[name="when"]:checked') || {}).value || "asap";
+    i.when = (form.querySelector('input[name="when"]:checked') || {}).value || "";
     i.time = $("#pickupTime").value;
     i.pay = (form.querySelector('input[name="pay"]:checked') || {}).value || "";
     i.cash = $("#cashAmount").value.replace(/\D/g, "");
@@ -998,6 +1069,45 @@
     }
   }
 
+  // Lo que falta completar en Entrega, en orden de aparición: [id del campo, texto].
+  function missingDelivery() {
+    readDeliveryForm();
+    const i = state.info;
+    const out = [];
+    if (i.name.length < 2) out.push(["custName", "tu nombre"]);
+    if (!i.mode) out.push(["mode", "delivery o retiro"]);
+    if (i.mode === "pickup" && !i.when) out.push(["when", "cuándo pasás"]);
+    if (i.mode === "pickup" && i.when === "time" && !i.time) out.push(["pickupTime", "el horario"]);
+    if (!i.pay) out.push(["pay", "la forma de pago"]);
+    return out;
+  }
+
+  function updateMissing() {
+    const el = $("#missingHint");
+    const miss = step === "delivery" ? missingDelivery() : [];
+    el.hidden = !miss.length;
+    if (miss.length) el.textContent = "Te falta: " + miss.map((m) => m[1]).join(", ");
+  }
+  $("#missingHint").addEventListener("click", () => validateDelivery());
+
+  // Al responder una pregunta, bajar sola a la siguiente que falte (en el celular quedan fuera de la vista).
+  function scrollToNext(after) {
+    const target = {
+      mode: state.info.mode === "pickup" ? "#whenField" : "#deliveryNotice",
+      when: state.info.when === "time" ? "#timePick" : "#payField",
+      pickupTime: "#payField",
+      pay: state.info.pay === "Transferencia" ? "#transferField" : state.info.pay === "Efectivo" ? "#cashField" : null,
+    }[after];
+    let el = target && $(target);
+    // Después de "cuándo pasás" u horario: ir a lo primero que siga faltando (si ya eligió pago, no hace falta bajar).
+    const miss = missingDelivery().filter((m) => m[0] !== "custName");
+    if ((after === "when" || after === "pickupTime") && miss.length) el = fieldFor(miss[0][0]);
+    if ((after === "when" || after === "pickupTime") && !miss.length && el && el.id === "payField") el = null;
+    if (!el || el.hidden) return;
+    setTimeout(() => el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: after === "pay" ? "nearest" : "start" }), 60);
+  }
+  const fieldFor = (id) => document.querySelector(`[data-error-for="${id}"]`).closest(".field, .time-pick");
+
   form.addEventListener("change", (e) => {
     syncDeliveryUI();
     readDeliveryForm();
@@ -1005,6 +1115,9 @@
     if (f) f.classList.remove("invalid");
     save();
     updateTotals();
+    const which = e.target.name === "mode" || e.target.name === "when" || e.target.name === "pay" ? e.target.name
+      : e.target.id === "pickupTime" ? "pickupTime" : null;
+    if (which) scrollToNext(which);
   });
   form.addEventListener("input", (e) => {
     if (e.target.id === "cashAmount") {
@@ -1015,28 +1128,27 @@
     if (f) f.classList.remove("invalid");
     readDeliveryForm();
     save();
+    updateMissing();
   });
   form.addEventListener("submit", (e) => { e.preventDefault(); next(); });
 
   function validateDelivery() {
     readDeliveryForm();
     const i = state.info;
+    const missing = new Set(missingDelivery().map((m) => m[0]));
     const bad = [];
-    const mark = (id, cond) => {
-      const fieldEl = document.querySelector(`[data-error-for="${id}"]`).closest(".field, .time-pick");
-      fieldEl.classList.toggle("invalid", !cond);
-      if (!cond) bad.push(fieldEl);
-    };
-    mark("custName", i.name.length >= 2);
-    mark("mode", !!i.mode);
-    if (i.mode === "pickup" && i.when === "time") mark("pickupTime", !!i.time);
+    ["custName", "mode", "when", "pickupTime", "pay"].forEach((id) => {
+      const fieldEl = fieldFor(id);
+      fieldEl.classList.toggle("invalid", missing.has(id));
+      if (missing.has(id)) bad.push(fieldEl);
+    });
     if (bad.length) {
       bad[0].scrollIntoView({ block: "center", behavior: "smooth" });
-      const input = bad[0].querySelector("input");
+      const input = bad[0].querySelector("input, select");
       if (input) input.focus({ preventScroll: true });
       return false;
     }
-    return true;
+    return i.name.length >= 2;
   }
 
   /* Paso 3: resumen */
@@ -1148,27 +1260,44 @@
     $("#sentPayTip").hidden = !isTransfer;
     if (isTransfer) $("#sentPayText").textContent = transferText(true);
     saveLastOrder();
-    const w = window.open(url, "_blank", "noopener");
-    if (!w) window.location.href = url;
+    // Con "noopener" window.open siempre devuelve null; se abre normal y se corta el vínculo a mano.
+    const w = window.open(url, "_blank");
+    if (w) { try { w.opener = null; } catch (_) { /* otra ventana */ } } else window.location.href = url;
+
+    // El pedido ya salió: se vacía el carrito (queda guardado por si hay que volver).
+    sentSnapshot = clearCart();
+    againDismissed = true; // no ofrecer "pedir lo mismo" justo después de enviarlo
+    changed();
+    while (stack.length) closeTop();
+    setStep("cart");
     openDialog($("#sentSheet"));
   }
+  let sentSnapshot = null;
 
   function next() {
     if (!state.lines.length) return;
     if (step === "cart") setStep("delivery");
-    else if (step === "delivery") { if (validateDelivery()) { save(); setStep("review"); } }
+    else if (step === "delivery") {
+      if (!validateDelivery()) return;
+      save();
+      if (!upsellShown && openUpsell()) return; // al cerrar la ventana sigue a Confirmar
+      setStep("review");
+    }
     else send();
   }
   $("#nextBtn").addEventListener("click", next);
 
   $("#newOrderBtn").addEventListener("click", () => {
-    state.lines = [];
-    state.generalNotes = "";
-    againDismissed = true; // recién lo envió: no ofrecer repetirlo enseguida
-    changed();
     while (stack.length) closeTop();
-    toast("Listo, podés armar un pedido nuevo");
     window.scrollTo({ top: 0 });
+  });
+
+  // "Me faltó algo": recupera el pedido recién enviado para corregirlo y reenviarlo.
+  $("#restoreBtn").addEventListener("click", () => {
+    if (sentSnapshot) restoreCart(sentSnapshot);
+    sentSnapshot = null;
+    while (stack.length) closeTop();
+    openDrawer("cart");
   });
 
   // Exponer para pruebas desde la consola.

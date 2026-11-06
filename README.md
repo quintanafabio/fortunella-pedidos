@@ -14,3 +14,9 @@ para enviar al local. Es un sitio estático: sin backend ni dependencias.
 ## Cambiar precios
 
 Editá `data/menu.js` y subí el cambio; GitHub Pages lo publica en uno o dos minutos.
+
+## Al publicar cambios
+
+En `index.html`, los archivos CSS y JS se cargan con `?v=N` (por ejemplo `js/app.js?v=6`). Subí ese
+número en las cuatro referencias cada vez que publiques, así los celulares no usan la versión vieja
+guardada en caché.

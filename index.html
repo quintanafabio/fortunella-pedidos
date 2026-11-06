@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Bebas+Neue&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/styles.css?v=8">
 </head>
 <body>
 
@@ -130,6 +130,22 @@
   </div>
 </section>
 
+<!-- "¿Le sumás algo?": entre Entrega y Confirmar -->
+<section class="sheet" id="upsellSheet" role="dialog" aria-modal="true" aria-labelledby="upsellTitle" hidden>
+  <div class="sheet-grip" aria-hidden="true"></div>
+  <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar y ver el resumen">×</button>
+  <div class="sheet-body">
+    <p class="sheet-cat">Antes de confirmar</p>
+    <h2 class="sheet-title" id="upsellTitle">¿Le sumás algo?</h2>
+    <p class="sheet-desc" id="upsellDesc"></p>
+    <div class="upsell-list" id="upsellList"></div>
+  </div>
+  <div class="sheet-foot">
+    <div class="upsell-total"><small>Total</small><b id="upsellTotal">$0</b></div>
+    <button class="btn primary grow" type="button" id="upsellNext">No, gracias</button>
+  </div>
+</section>
+
 <!-- Panel del pedido: carrito → entrega → resumen -->
 <section class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
   <header class="drawer-head">
@@ -151,10 +167,17 @@
     <!-- Paso 1 -->
     <div class="step" data-panel="cart">
       <ul class="lines" id="lines"></ul>
-      <section class="upsell" id="upsell" aria-labelledby="upsellTitle" hidden>
-        <h3 id="upsellTitle">¿Le sumás algo?</h3>
-        <div class="upsell-list" id="upsellList"></div>
-      </section>
+      <div class="clear-cart" id="clearCart" hidden>
+        <button type="button" class="clear-link" id="clearAsk">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-3 6h12l-1 12H7L6 9Z"/></svg>
+          Vaciar carrito
+        </button>
+        <div class="clear-confirm" id="clearConfirm" role="group" aria-label="Confirmar vaciar carrito" hidden>
+          <span>¿Quitar todos los productos?</span>
+          <button type="button" class="text-btn" id="clearNo">Cancelar</button>
+          <button type="button" class="clear-yes" id="clearYes">Sí, vaciar</button>
+        </div>
+      </div>
       <div class="empty" id="emptyCart">
         <p>Tu pedido está vacío.</p>
         <button class="btn ghost" type="button" data-close>Ver la carta</button>
@@ -173,7 +196,7 @@
         <p class="error" data-error-for="custName">Contanos a nombre de quién va el pedido.</p>
       </div>
 
-      <fieldset class="field">
+      <fieldset class="field" id="modeField">
         <legend>¿Cómo lo querés?</legend>
         <div class="choice-grid">
           <label class="choice">
@@ -189,7 +212,7 @@
       </fieldset>
 
       <div class="mode-panel" data-mode="delivery" hidden>
-        <div class="notice">
+        <div class="notice" id="deliveryNotice">
           <span class="notice-icon" aria-hidden="true">📍</span>
           <div>
             <b>La ubicación la mandás por WhatsApp</b>
@@ -209,10 +232,10 @@
           <span><b>Retirás en</b><span id="storeAddress"></span></span>
           <span class="store-link-cta">Ver mapa</span>
         </a>
-        <fieldset class="field">
+        <fieldset class="field" id="whenField">
           <legend>¿Cuándo pasás?</legend>
           <label class="radio-row">
-            <input type="radio" name="when" value="asap" checked>
+            <input type="radio" name="when" value="asap">
             <span>Que el local me avise cuándo está listo</span>
           </label>
           <label class="radio-row">
@@ -224,12 +247,14 @@
             <p class="hint" id="pickupHint"></p>
             <p class="error" data-error-for="pickupTime">Elegí un horario.</p>
           </div>
+          <p class="error" data-error-for="when">Elegí cuándo pasás a retirarlo.</p>
         </fieldset>
       </div>
 
-      <fieldset class="field">
+      <fieldset class="field" id="payField">
         <legend>Forma de pago</legend>
         <div class="pills" id="payPills"></div>
+        <p class="error" data-error-for="pay">Elegí cómo vas a pagar.</p>
         <div class="cash" id="cashField" hidden>
           <label for="cashAmount" class="lbl">¿Con cuánto abonás? <span class="opt">(opcional, para el vuelto)</span></label>
           <input id="cashAmount" type="text" inputmode="numeric" maxlength="10" placeholder="$">
@@ -254,6 +279,7 @@
   </div>
 
   <footer class="drawer-foot">
+    <button type="button" class="missing" id="missingHint" hidden></button>
     <div class="totals">
       <span>Total</span>
       <strong id="drawerTotal">$0</strong>
@@ -267,7 +293,7 @@
   <div class="sheet-body center">
     <p class="sent-icon" aria-hidden="true">✓</p>
     <h2 class="sheet-title" id="sentTitle">¡Listo! Abrimos WhatsApp</h2>
-    <p class="sheet-desc">Revisá el mensaje y tocá enviar. Si WhatsApp no se abrió, probá de nuevo.</p>
+    <p class="sheet-desc">Revisá el mensaje y tocá enviar. Si WhatsApp no se abrió, probá de nuevo. Tu carrito quedó vacío para un próximo pedido.</p>
     <div class="notice" id="sentLocTip" hidden>
       <span class="notice-icon" aria-hidden="true">📍</span>
       <div>
@@ -281,16 +307,16 @@
     </div>
   </div>
   <div class="sheet-foot column">
+    <button class="btn primary" type="button" id="newOrderBtn">Listo</button>
     <a class="btn ghost" id="retryLink" href="#" target="_blank" rel="noopener">Abrir WhatsApp de nuevo</a>
-    <button class="btn primary" type="button" id="newOrderBtn">Empezar un pedido nuevo</button>
-    <button class="btn link" type="button" data-close>Volver a mi pedido</button>
+    <button class="btn link" type="button" id="restoreBtn">Me faltó algo: volver a mi pedido</button>
   </div>
 </section>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js"></script>
-<script src="data/menu.js"></script>
-<script src="js/app.js"></script>
+<script src="js/config.js?v=8"></script>
+<script src="data/menu.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>
