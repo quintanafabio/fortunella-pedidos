@@ -15,6 +15,14 @@ para enviar al local. Es un sitio estático: sin backend ni dependencias.
 
 Editá `data/menu.js` y subí el cambio; GitHub Pages lo publica en uno o dos minutos.
 
+## Dónde está publicado
+
+- https://fortunellapizzas.vercel.app (link principal, proyecto `fortunellapizzas` en Vercel).
+- https://quintanafabio.github.io/fortunella-pedidos/ (GitHub Pages, se actualiza con cada push).
+
+Si Vercel no tiene acceso al repo de GitHub, se publica a mano con `vercel deploy --prod`.
+`.vercelignore` deja afuera los archivos que no son del sitio.
+
 ## Al publicar cambios
 
 En `index.html`, los archivos CSS y JS se cargan con `?v=N` (por ejemplo `js/app.js?v=6`). Subí ese

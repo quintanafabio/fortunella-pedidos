@@ -1,2 +1,5 @@
 .claude/
 oldpage-fortunella.txt
+
+.vercel
+.env*
