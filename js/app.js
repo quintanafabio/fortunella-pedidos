@@ -17,9 +17,11 @@
   const sizeName = (label) => {
     if (!label) return "";
     if (SIZE_NAMES[label]) return SIZE_NAMES[label];
+    if (/^\d/.test(label)) return label; // "350 ml", "1,5 L"
     const s = label.toLowerCase();
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
+  const sizeLow = (label) => (/^\d/.test(label || "") ? sizeName(label) : sizeName(label).toLowerCase());
   const norm = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
   // Construye nodos sin innerHTML (todo el texto pasa por textContent).
@@ -55,21 +57,80 @@
     return out;
   }
 
+  const slug = (t) => norm(t).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const capFirst = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : t);
+
+  // Bebidas: "Coca Zero 350ml" y "Coca Zero 1L" pasan a ser un producto con dos tamaños.
+  const SIZE_RE = /\s+(\d+(?:[.,]\d+)?)\s*(ml|cc|l)$/i;
+  const sizeLabel = (num, unit) => (unit.toLowerCase() === "l" ? `${num} L` : `${num} ${unit.toLowerCase()}`);
+  function mlOf(label) {
+    const m = /^([\d.,]+)\s*(ml|cc|l)$/i.exec(label || "");
+    if (!m) return Infinity;
+    const v = parseFloat(m[1].replace(",", "."));
+    return m[2].toLowerCase() === "l" ? v * 1000 : v;
+  }
+  function mergeSized(items) {
+    const out = [];
+    const byBase = new Map();
+    for (const it of items) {
+      const prices = (it.prices || []).filter((p) => typeof p.value === "number");
+      const m = it.name.match(SIZE_RE);
+      if (!m || prices.length !== 1) { out.push(it); continue; }
+      const base = it.name.replace(SIZE_RE, "").trim();
+      const key = (it.subgroup || "") + "§" + norm(base);
+      let row = byBase.get(key);
+      if (!row) {
+        row = { ...it, name: base, prices: [], sized: true };
+        byBase.set(key, row);
+        out.push(row);
+      }
+      row.prices.push({ label: sizeLabel(m[1], m[2]), value: prices[0].value });
+    }
+    out.forEach((r) => r.sized && r.prices.sort((a, b) => mlOf(a.label) - mlOf(b.label)));
+    return out;
+  }
+
+  // Todas las secciones de bebidas (sin y con alcohol) van juntas en una sola, como en la carta impresa.
+  function joinBebidas(modules) {
+    const out = [];
+    let beb = null;
+    for (const mod of modules) {
+      if (mod.layout_type !== "bebidas-grid") { out.push(mod); continue; }
+      const fallback = capFirst(mod.name.replace(/^bebidas\s*/i, "")) || "Bebidas";
+      const items = (mod.items || []).map((it) => ({ ...it, subgroup: capFirst(it.subgroup) || fallback }));
+      if (!beb) {
+        beb = { ...mod, name: "Bebidas", subtitle: mod.subtitle || "", items: [] };
+        out.push(beb);
+      }
+      beb.items.push(...items);
+    }
+    if (beb) beb.items = mergeSized(beb.items);
+    return out;
+  }
+
   function prepare(modules) {
-    MODULES = modules.map((mod, mi) => {
-      const items = (mod.items || []).map((it, ii) => {
+    const usedIds = new Set();
+    MODULES = joinBebidas(modules).map((mod) => {
+      let secId = "s-" + slug(mod.name);
+      while (usedIds.has(secId)) secId += "-2";
+      usedIds.add(secId);
+      const items = (mod.items || []).map((it) => {
         const prices = (it.prices || []).filter((p) => typeof p.value === "number");
         const extras = parseExtras(it.note);
+        // Id estable (sección + nombre): si el local reordena la carta, los pedidos guardados siguen valiendo.
+        let id = secId + "/" + slug(it.name);
+        while (ITEMS.has(id)) id += "-2";
         const item = {
-          id: `m${mi}i${ii}`,
+          id,
           name: it.name,
           description: it.description || "",
           note: extras.length ? "" : it.note || "",
           extras,
           prices,
           featured: !!it.featured,
+          sized: !!it.sized, // bebida con varios tamaños (columnas de la tabla)
           subgroup: it.subgroup || null,
-          cat: mod.name,
+          cat: mod.layout_type === "bebidas-grid" ? "Bebidas" : capFirst(mod.name),
           layout: mod.layout_type,
         };
         // Mitad y mitad: solo pizzas comunes que vienen en tamaño grande (no la de molde ni el box).
@@ -78,7 +139,7 @@
         ITEMS.set(item.id, item);
         return item;
       });
-      return { id: `cat${mi}`, name: mod.name, subtitle: mod.subtitle, variant: mod.title_variant, layout: mod.layout_type, items };
+      return { id: secId, name: mod.name, subtitle: mod.subtitle, variant: mod.title_variant, layout: mod.layout_type, items };
     });
   }
 
@@ -86,7 +147,11 @@
     if (CFG.supabaseUrl && CFG.supabaseAnonKey) {
       try {
         const url = `${CFG.supabaseUrl.replace(/\/$/, "")}/rest/v1/modules?select=*,items(*)&menu=eq.${encodeURIComponent(CFG.menuName || "fortunella")}&order=position.asc`;
-        const res = await fetch(url, { headers: { apikey: CFG.supabaseAnonKey, Authorization: `Bearer ${CFG.supabaseAnonKey}` } });
+        // Si la base tarda, se usa la copia de data/menu.js para no dejar la carta en blanco.
+        const ctrl = "AbortController" in window ? new AbortController() : null;
+        const timer = ctrl && setTimeout(() => ctrl.abort(), 6000);
+        const res = await fetch(url, { signal: ctrl && ctrl.signal, headers: { apikey: CFG.supabaseAnonKey, Authorization: `Bearer ${CFG.supabaseAnonKey}` } });
+        clearTimeout(timer);
         if (!res.ok) throw new Error("HTTP " + res.status);
         const data = await res.json();
         if (Array.isArray(data) && data.length) {
@@ -180,18 +245,76 @@
 
   const menuEl = $("#menu");
   const catsEl = $("#cats");
+  const ART_DIR = "assets/patio/";
+
+  // Ilustración y nombre corto de cada sección, reconocida por su nombre
+  // (si el local la renombra o agrega una nueva, no se rompe nada: queda sin dibujo).
+  const ART = [
+    [/valiente/i, null, null, ""],
+    [/entrad/i, ["croquetas"], "Entraditas", "tilt-r"],
+    [/esper|empanad/i, ["empanada-dorada"], "Empanadas", "tilt-l"],
+    [/sandwich|focac/i, ["focaccia"], "Sándwiches", "tilt-r"],
+    [/pizza/i, ["pizza"], "Pizzas", ""],
+    [/papa/i, ["papas-fritas"], "Papas fritas", "tilt-r"],
+    [/kids|niñ/i, ["menu-kids-milanesa"], "Menú kids", "tilt-l"],
+    [/ensalad/i, ["caesar-bowl"], "Ensaladas", "tilt-l"],
+    [/dulce|postre/i, ["tiramisu"], "Postres", "tilt-l"],
+    [/bebida/i, ["cola", "aperol"], "Bebidas", "tall"],
+  ];
+  const artFor = (name) => {
+    const r = ART.find(([re]) => re.test(name));
+    return r ? { imgs: r[1], label: r[2], cls: r[3], hideNav: r[1] === null } : null;
+  };
+
+  // Pizzas en tres grupos con mini banners. Si el ítem trae "subgrupo" se usa ese; si no, esta lista.
+  const PIZZA_GROUPS = [
+    { title: "Clásicas", tagline: "Las de siempre", img: "pz-clasicas",
+      names: ["Muzzarella", "Doble Muzzarella", "Margarita", "Fugazza", "Fugazza con Jamón", "Napolitana",
+        "Napolitana con Jamón", "Capresse", "Calabresa", "Jamón y Morrón", "Especial", "4 Quesos",
+        "Roquefort y Nuez", "Anchoas", "Cantimpalo", "Provolone", "Provolone con Jamón", "Ananás y Jamón",
+        "Champiñones", "Palmitos", "Picante", "Porteña", "Jamón Crudo y Rúcula", "Panceta Ahumada"] },
+    { title: "Clásicas reversionadas", tagline: "Con una vuelta de tuerca", img: "pz-reversionadas",
+      names: ["Roquefort con Peras y Nuez", "Brócoli y Jamón", "Brócoli y Panceta", "Choclo Asado",
+        "Choclo Asado y Queso Cremoso", "Ananás y Cerezas", "Veggie", "Popeye", "A Puro Huevo", "Un Viaje de Papas"] },
+    { title: "Especiales", tagline: "Las joyas de la casa", img: "pz-especiales",
+      names: ["Burrata y Mortadela", "Burrata y Jamón Crudo", "Carne", "Cherry Bocconcinos", "Chayera"] },
+  ];
+  // Fotos que cortan la lista de pizzas: después de cuántas tarjetas va cada una ("end" = al final).
+  const PIZZA_PHOTOS = {
+    "Clásicas": [
+      { at: 6, img: "foto-capresse", caption: "Capresse" },
+      { at: 12, img: "foto-calabresa", caption: "Calabresa" },
+      { at: 18, img: "foto-especial", caption: "Especial" },
+      { at: "end", img: "foto-portena", caption: "Porteña" },
+    ],
+    "Clásicas reversionadas": [{ at: 6, img: "foto-roquefort-peras", caption: "Roquefort con Peras y Nuez" }],
+    "Especiales": [{ at: "end", img: "foto-burrata-crudo", caption: "Burrata y Jamón Crudo" }],
+  };
+
+  // En la tarjeta de pizza va solo lo distintivo: la base (salsa, muzzarella, tomates asados y aceitunas) ya la dice el subtítulo.
+  function shortDesc(d) {
+    if (!d) return "";
+    let s = d.trim()
+      .replace(/^salsa,\s*/i, "")
+      .replace(/^muzz?arr?ella,\s*/i, "")
+      .replace(/,?\s*tomates asados y aceitunas$/i, "")
+      .replace(/,?\s*tomates asados y (aceitunas (?:negras|verdes))$/i, " · $1");
+    s = s.replace(/^\s*·\s*/, "").trim();
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+  }
 
   function itemCard(item) {
-    const compact = !item.description && item.prices.length === 1 && !item.featured;
+    let desc = item.description;
+    if (item.layout === "pizza-grid") {
+      desc = shortDesc(item.description);
+      if (norm(desc) === norm(item.name)) desc = ""; // no repetir "Calabresa / Calabresa"
+    }
     const card = h(
       "article",
-      { class: "item" + (item.featured ? " featured" : "") + (compact ? " compact" : ""), dataset: { id: item.id } },
-      h("div", { class: "item-main" },
-        h("h3", { class: "item-name" }, item.featured ? `✦ ${item.name} ✦` : item.name,
-          item.note ? h("span", { class: "item-note", text: " " + item.note }) : null),
-        item.description ? h("p", { class: "item-desc", text: item.description }) : null,
-        compact ? h("p", { class: "item-prices", text: money(item.prices[0].value) }) : null
-      ),
+      { class: "item" + (item.featured ? " featured" : ""), dataset: { id: item.id } },
+      h("h3", { class: "item-name" }, item.featured ? `✦ ${item.name} ✦` : item.name,
+        item.note ? h("span", { class: "item-note", text: " " + item.note }) : null),
+      desc ? h("p", { class: "item-desc", text: desc }) : null,
       h("div", { class: "item-actions" }),
       h("p", { class: "item-halves", hidden: true })
     );
@@ -202,11 +325,11 @@
   /* Botones de cada tarjeta: agregar por tamaño, contador, mitad y mitad */
   const extrasPick = new Map(); // itemId → Set de adicionales tildados en la tarjeta
   const plainLines = (id, size) => state.lines.filter((l) => l.itemId === id && !l.halfId && (l.size || null) === (size || null));
+  const plainCount = (id, size) => plainLines(id, size).reduce((s, l) => s + l.qty, 0);
 
   function renderActions(card, item = ITEMS.get(card.dataset.id)) {
     const box = $(".item-actions", card);
     const halvesEl = $(".item-halves", card);
-    const compact = card.classList.contains("compact");
     box.textContent = "";
     card.classList.remove("dim", "half-first");
     card.inert = false;
@@ -233,18 +356,18 @@
 
     item.prices.forEach((p) => {
       const size = p.label || null;
-      const n = plainLines(item.id, size).reduce((s, l) => s + l.qty, 0);
-      const label = size ? sizeName(size) : compact ? "" : "Agregar";
+      const n = plainCount(item.id, size);
+      const label = size ? sizeName(size) : "Agregar";
       const what = item.name + (size ? " " + sizeName(size) : "");
       if (n > 0) {
         box.appendChild(h("div", { class: "qty-group", role: "group", "aria-label": `${what}: ${n} en tu pedido` },
           h("button", { type: "button", "aria-label": `Restar un ${what}`, text: "−", onclick: () => quickRemove(item, size) }),
-          h("span", { class: "qg-label" }, h("b", { text: String(n) }), label ? h("small", { text: label }) : null),
+          h("span", { class: "qg-label" }, h("b", { text: String(n) }), h("small", { text: size ? label : "en tu pedido" })),
           h("button", { type: "button", "aria-label": `Sumar un ${what}`, text: "+", onclick: () => quickAdd(item, size) })));
       } else {
         box.appendChild(h("button", { type: "button", class: "add-btn", "aria-label": `Agregar ${what}, ${money(p.value)}`, onclick: () => quickAdd(item, size) },
           h("span", { class: "ab-size", text: "+ " + label }),
-          compact ? null : h("span", { class: "ab-price", text: money(p.value) })));
+          h("span", { class: "ab-price", text: money(p.value) })));
       }
     });
 
@@ -276,8 +399,76 @@
       : "";
   }
 
+  /* Tablas (empanadas, bebidas): cada precio es un botón; la cantidad se ve en el globito
+     y el "−" del renglón quita la última que agregaste. */
+  function priceTable(items, { title, columns, showHead }) {
+    const table = h("table", { class: "ptable" });
+    if (showHead && columns.length) {
+      table.appendChild(h("thead", null, h("tr", null, h("th", { scope: "col" }, h("span", { class: "sr-only", text: "Producto" })),
+        columns.map((c) => h("th", { scope: "col", text: c ? sizeName(c) : "" })))));
+    }
+    const body = h("tbody");
+    items.forEach((item) => {
+      const tr = h("tr", { class: "trow", dataset: { id: item.id } },
+        h("th", { scope: "row", class: "t-name" },
+          h("span", { class: "t-name-in" },
+            h("button", { type: "button", class: "t-minus", hidden: true, "aria-label": `Quitar un ${item.name}`, text: "−", onclick: () => rowRemove(item) }),
+            h("span", null, item.name, item.note ? h("small", { class: "item-note", text: " " + item.note }) : null))));
+      const single = item.prices.length === 1 && !columns.includes(item.prices[0].label || "");
+      if (single) {
+        const td = h("td", { class: "t-cell" }, cellBtn(item, item.prices[0]));
+        td.colSpan = Math.max(1, columns.length);
+        tr.appendChild(td);
+      } else {
+        columns.forEach((c) => {
+          const p = item.prices.find((x) => (x.label || "") === c);
+          tr.appendChild(h("td", { class: "t-cell" }, p ? cellBtn(item, p) : h("span", { class: "t-dash", "aria-hidden": "true", text: "—" })));
+        });
+      }
+      body.appendChild(tr);
+      renderRow(tr, item);
+    });
+    table.appendChild(body);
+    return h("div", { class: "ptable-card group" }, title ? h("p", { class: "ptable-title", text: title }) : null, table);
+  }
+
+  function cellBtn(item, p) {
+    const size = p.label || null;
+    return h("button", { type: "button", class: "cell-btn", dataset: { size: size || "" }, onclick: () => quickAdd(item, size) },
+      h("span", { text: money(p.value) }), h("b", { class: "cell-n", "aria-hidden": "true" }));
+  }
+
+  function renderRow(tr, item = ITEMS.get(tr.dataset.id)) {
+    let rowTotal = 0;
+    $$(".cell-btn", tr).forEach((b) => {
+      const size = b.dataset.size || null;
+      const n = plainCount(item.id, size);
+      rowTotal += n;
+      b.classList.toggle("on", n > 0);
+      $(".cell-n", b).textContent = n > 0 ? String(n) : "";
+      const what = item.name + (size ? " " + sizeName(size) : "");
+      b.setAttribute("aria-label", `Agregar ${what}, ${money(priceFor(item, size))}${n ? `. Tenés ${n} en tu pedido` : ""}`);
+    });
+    $(".t-minus", tr).hidden = rowTotal === 0;
+    tr.classList.toggle("in-cart", rowTotal > 0);
+    tr.classList.toggle("dim", !!halfFirst);
+    tr.inert = !!halfFirst;
+  }
+
+  function rowRemove(item) {
+    for (let i = state.lines.length - 1; i >= 0; i--) {
+      const l = state.lines[i];
+      if (l.itemId === item.id && !l.halfId) {
+        if (l.qty > 1) l.qty--; else state.lines.splice(i, 1);
+        changed();
+        return;
+      }
+    }
+  }
+
   function refreshCards() {
     $$(".item", menuEl).forEach((c) => renderActions(c));
+    $$(".trow", menuEl).forEach((r) => renderRow(r));
   }
 
   function afterAdd(line, msg) {
@@ -294,7 +485,7 @@
     const extras = Array.from(extrasPick.get(item.id) || []);
     const line = { itemId: item.id, name: item.name, size, halfId: null, extras, notes: "", qty: 1 };
     addLine(line);
-    afterAdd(line, `Agregaste ${item.name}${size ? " " + sizeName(size).toLowerCase() : ""}${extras.length ? " con " + extras.join(", ") : ""}`);
+    afterAdd(line, `Agregaste ${item.name}${size ? " " + sizeLow(size) : ""}${extras.length ? " con " + extras.join(", ") : ""}`);
   }
 
   function quickRemove(item, size) {
@@ -325,7 +516,7 @@
     halfBar.hidden = true;
     refreshCards();
     updateBar();
-    const card = id && menuEl.querySelector(`.item[data-id="${id}"] .half-btn`);
+    const card = id && menuEl.querySelector(`.item[data-id="${CSS.escape(id)}"] .half-btn`);
     if (card) card.focus({ preventScroll: true });
   }
 
@@ -339,30 +530,185 @@
 
   $("#halfCancel").addEventListener("click", cancelHalf);
 
+  /* Armado de cada sección según su tipo */
+  function cardGrid(items, extraClass) {
+    const grid = h("div", { class: "cards group" + (extraClass ? " " + extraClass : "") + (items.some((i) => i.description) ? " has-desc" : "") });
+    items.forEach((it) => grid.appendChild(itemCard(it)));
+    return grid;
+  }
+
+  // Agrupa por subgrupo respetando el orden de aparición.
+  function bySubgroup(items) {
+    const groups = [];
+    const index = new Map();
+    for (const it of items) {
+      const key = it.subgroup || "";
+      if (!index.has(key)) { index.set(key, { subgroup: it.subgroup, items: [] }); groups.push(index.get(key)); }
+      index.get(key).items.push(it);
+    }
+    return groups;
+  }
+
+  function renderList(section, mod) {
+    bySubgroup(mod.items).forEach((g) => {
+      if (g.subgroup) section.appendChild(h("h3", { class: "subgroup", text: g.subgroup }));
+      section.appendChild(cardGrid(g.items));
+    });
+  }
+
+  function photoBanner(p) {
+    return h("figure", { class: "v-photo" },
+      h("img", { src: `${ART_DIR}${p.img}.webp`, alt: `Pizza ${p.caption}`, loading: "lazy", onerror: (e) => e.target.parentNode.remove() }),
+      h("figcaption", { text: p.caption }));
+  }
+
+  function renderPizzas(section, mod) {
+    const list = mod.items.filter((i) => !i.featured);
+    const groups = [];
+    const byTitle = new Map();
+    const ensure = (meta) => {
+      if (!byTitle.has(meta.title)) { const g = { ...meta, items: [] }; byTitle.set(meta.title, g); groups.push(g); }
+      return byTitle.get(meta.title);
+    };
+    PIZZA_GROUPS.forEach(ensure);
+    for (const it of list) {
+      const meta = it.subgroup
+        ? PIZZA_GROUPS.find((g) => norm(g.title) === norm(it.subgroup)) || { title: it.subgroup, tagline: "", img: "pz-clasicas" }
+        : PIZZA_GROUPS.find((g) => g.names.some((n) => norm(n) === norm(it.name))) || PIZZA_GROUPS[0];
+      ensure(meta).items.push(it);
+    }
+    const used = groups.filter((g) => g.items.length);
+
+    const panels = used.map((g, gi) => {
+      const grid = cardGrid(g.items, "pz pz-panel");
+      grid.id = `${mod.id}-p${gi}`;
+      const cards = Array.from(grid.children);
+      for (const p of PIZZA_PHOTOS[g.title] || []) {
+        if (p.at === "end" || p.at >= cards.length) grid.appendChild(photoBanner(p));
+        else cards[p.at].before(photoBanner(p));
+      }
+      // Con la búsqueda activa no hay pestañas: cada grupo muestra su título.
+      grid.prepend(h("p", { class: "pz-panel-title", text: g.title }));
+      return grid;
+    });
+
+    if (used.length > 1) {
+      const tabs = h("div", { class: "v-pz-tabs", role: "tablist", "aria-label": "Tipos de pizza" });
+      const select = (i, scroll) => {
+        Array.from(tabs.children).forEach((t, k) => { t.classList.toggle("active", k === i); t.setAttribute("aria-selected", String(k === i)); t.tabIndex = k === i ? 0 : -1; });
+        panels.forEach((p, k) => p.classList.toggle("current", k === i));
+        applySearch($("#search").value);
+        if (scroll && tabs.getBoundingClientRect().top < 70) tabs.scrollIntoView({ behavior: motionOk() ? "smooth" : "auto", block: "start" });
+      };
+      used.forEach((g, gi) => {
+        const b = h("button", { type: "button", class: "v-pz-tab", role: "tab", "aria-controls": panels[gi].id, onclick: () => select(gi, true),
+          onkeydown: (e) => {
+            const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+            if (!d) return;
+            e.preventDefault();
+            const n = (gi + d + used.length) % used.length;
+            select(n, false);
+            tabs.children[n].focus();
+          } },
+          h("img", { src: `${ART_DIR}${g.img}.webp`, alt: "", loading: "lazy" }),
+          h("span", { class: "v-pz-tab-title", text: g.title }),
+          g.tagline ? h("span", { class: "v-pz-tab-tag", text: g.tagline }) : null,
+          h("span", { class: "v-pz-tab-count", text: `${g.items.length} pizzas` }));
+        tabs.appendChild(b);
+      });
+      section.appendChild(tabs);
+      panels.forEach((p) => { p.setAttribute("role", "tabpanel"); section.appendChild(p); });
+      select(0, false);
+    } else {
+      panels.forEach((p) => { p.classList.add("current"); section.appendChild(p); });
+    }
+
+    const featured = mod.items.filter((i) => i.featured);
+    if (featured.length) section.appendChild(cardGrid(featured, "pz"));
+  }
+
+  function renderEmpanadas(section, mod) {
+    // Si alguna trae descripción o adicionales, mejor en tarjetas.
+    if (mod.items.some((i) => i.description || i.extras.length)) return renderList(section, mod);
+    const columns = [];
+    mod.items.forEach((i) => i.prices.forEach((p) => { if (!columns.includes(p.label || "")) columns.push(p.label || ""); }));
+    section.appendChild(h("div", { class: "ptable-wrap" }, priceTable(mod.items, { columns, showHead: columns.some(Boolean) })));
+  }
+
+  function renderBebidas(section, mod) {
+    const wrap = h("div", { class: "beb" });
+    bySubgroup(mod.items).forEach((g) => {
+      const sized = g.items.filter((i) => i.sized);
+      const plain = g.items.filter((i) => !i.sized);
+      if (sized.length) {
+        const columns = [...new Set(sized.flatMap((i) => i.prices.map((p) => p.label)))].sort((a, b) => mlOf(a) - mlOf(b));
+        // Las que no tienen tamaño (ej. Limonada) van en la misma tabla, con el precio a lo ancho.
+        wrap.appendChild(priceTable(sized.concat(plain), { title: g.subgroup, columns, showHead: true }));
+      } else {
+        wrap.appendChild(priceTable(plain, { title: g.subgroup, columns: [], showHead: false }));
+      }
+    });
+    section.appendChild(wrap);
+  }
+
+  const RENDER = { "pizza-grid": renderPizzas, list: renderList, "postre-cards": renderList, "emp-table": renderEmpanadas, "bebidas-grid": renderBebidas };
+
+  // Todas las ilustraciones ocupan la misma superficie, así se ven del mismo tamaño (redondas o alargadas).
+  function sizeArt(img) {
+    const fit = () => {
+      const area = window.innerWidth <= 768 ? 11500 : 15800;
+      const r = img.naturalWidth / img.naturalHeight;
+      if (!r) return;
+      const hh = Math.sqrt(area / r);
+      img.style.width = `${Math.round(hh * r)}px`;
+      img.style.height = `${Math.round(hh)}px`;
+    };
+    if (img.complete) fit(); else img.addEventListener("load", fit);
+  }
+
+  const motionOk = () => !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reveal = "IntersectionObserver" in window
+    ? new IntersectionObserver((entries) => entries.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add("in"); reveal.unobserve(e.target); }
+    }), { rootMargin: "0px 0px -10% 0px" })
+    : null;
+
   function renderMenu() {
     menuEl.textContent = "";
     catsEl.textContent = "";
     MODULES.forEach((mod, i) => {
-      catsEl.appendChild(h("button", { type: "button", class: "cat-chip", dataset: { target: mod.id }, text: mod.name, onclick: () => goTo(mod.id) }));
-      if (i) menuEl.appendChild(h("div", { class: "divider", "aria-hidden": "true", text: "✦ · ✦ · ✦" }));
-      const section = h("section", { class: "section", id: mod.id, "aria-labelledby": mod.id + "-t" });
-      const head = h("div", { class: "sec-head" + (mod.variant === "valientes" ? " valientes" : "") },
-        h("h2", { class: "sec-title" + (mod.variant === "orange" ? " orange" : ""), id: mod.id + "-t", text: mod.name }),
-        mod.subtitle ? h("p", { class: "sec-sub", text: mod.subtitle }) : null
-      );
-      section.appendChild(head);
-      let currentGroup;
-      let grid;
-      mod.items.forEach((item) => {
-        if (!grid || item.subgroup !== currentGroup) {
-          currentGroup = item.subgroup;
-          if (item.subgroup) section.appendChild(h("h3", { class: "subgroup", text: item.subgroup }));
-          grid = h("div", { class: "grid" });
-          section.appendChild(grid);
-        }
-        grid.appendChild(itemCard(item));
-      });
+      const art = artFor(mod.name);
+      const valientes = mod.variant === "valientes";
+      if (i && !valientes) menuEl.appendChild(h("div", { class: "divider", "aria-hidden": "true" }));
+      const section = h("section", { class: "section" + (valientes ? " valientes" : ""), id: mod.id, "aria-labelledby": mod.id + "-t" });
+
+      if (art && art.imgs) {
+        const fig = h("figure", { class: "v-art " + art.cls + (reveal ? " reveal" : ""), "aria-hidden": "true" });
+        art.imgs.forEach((name) => {
+          const img = h("img", { src: `${ART_DIR}${name}.webp`, alt: "", loading: "lazy", onerror: () => img.remove() });
+          sizeArt(img);
+          fig.appendChild(img);
+        });
+        section.appendChild(fig);
+        if (reveal) reveal.observe(fig);
+      }
+
+      if (valientes) {
+        section.appendChild(h("div", { class: "valientes-header" },
+          h("h2", { class: "valientes-title", id: mod.id + "-t", text: mod.name }),
+          mod.subtitle ? h("p", { class: "valientes-sub", text: mod.subtitle }) : null));
+      } else {
+        section.appendChild(h("h2", { class: "sec-title" + (mod.variant === "orange" ? " orange" : ""), id: mod.id + "-t", text: mod.name }));
+        if (mod.subtitle) section.appendChild(h("p", { class: "sec-sub", text: mod.subtitle }));
+      }
+
+      (RENDER[mod.layout] || renderList)(section, mod);
       menuEl.appendChild(section);
+
+      if (!(art && art.hideNav)) {
+        catsEl.appendChild(h("a", { href: "#" + mod.id, class: "cat-chip", dataset: { target: mod.id }, text: (art && art.label) || capFirst(mod.name),
+          onclick: (e) => { e.preventDefault(); goTo(mod.id); } }));
+      }
     });
     menuEl.appendChild(h("p", { class: "no-results", id: "noResults", hidden: true, text: "No encontramos nada con ese nombre." }));
     setupScrollSpy();
@@ -371,57 +717,77 @@
   function goTo(id) {
     const search = $("#search");
     if (search.value) { search.value = ""; applySearch(""); }
-    document.getElementById(id).scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    document.getElementById(id).scrollIntoView({ behavior: motionOk() ? "smooth" : "auto" });
   }
 
   function setActiveChip(id) {
     $$(".cat-chip", catsEl).forEach((c) => {
       const on = c.dataset.target === id;
-      c.setAttribute("aria-current", on ? "true" : "false");
-      if (on) {
-        const left = c.offsetLeft - catsEl.clientWidth / 2 + c.clientWidth / 2;
-        catsEl.scrollTo({ left, behavior: "smooth" });
+      c.classList.toggle("active", on);
+      if (on) c.setAttribute("aria-current", "true"); else c.removeAttribute("aria-current");
+      if (on && catsEl.scrollWidth > catsEl.clientWidth) {
+        catsEl.scrollTo({ left: c.offsetLeft - (catsEl.clientWidth - c.offsetWidth) / 2, behavior: motionOk() ? "smooth" : "auto" });
       }
     });
   }
 
   function setupScrollSpy() {
-    const sections = $$(".section", menuEl);
+    const sections = $$(".section", menuEl).filter((s) => catsEl.querySelector(`[data-target="${CSS.escape(s.id)}"]`));
     if (!("IntersectionObserver" in window)) return;
     const visible = new Map();
     const io = new IntersectionObserver((entries) => {
-      entries.forEach((e) => visible.set(e.target.id, e.isIntersecting ? e.boundingClientRect.top : null));
-      const first = sections.find((s) => visible.get(s.id) != null);
+      entries.forEach((e) => visible.set(e.target.id, e.isIntersecting));
+      const first = sections.find((s) => visible.get(s.id));
       if (first) setActiveChip(first.id);
-    }, { rootMargin: "-130px 0px -55% 0px" });
+    }, { rootMargin: "-30% 0px -60% 0px" });
     sections.forEach((s) => io.observe(s));
-    setActiveChip(sections[0] && sections[0].id);
   }
 
   function applySearch(q) {
     const nq = norm(q.trim());
+    document.body.classList.toggle("searching", !!nq);
     let any = false;
     $$(".section", menuEl).forEach((sec) => {
       let secHas = false;
-      $$(".grid", sec).forEach((grid) => {
-        let gridHas = false;
-        $$(".item", grid).forEach((card) => {
-          const it = ITEMS.get(card.dataset.id);
-          const hit = !nq || norm(it.name + " " + it.description + " " + it.cat).includes(nq);
-          card.hidden = !hit;
-          gridHas = gridHas || hit;
-        });
-        grid.hidden = !gridHas;
-        const prev = grid.previousElementSibling;
-        if (prev && prev.classList.contains("subgroup")) prev.hidden = !gridHas;
-        secHas = secHas || gridHas;
+      $$("[data-id]", sec).forEach((el) => {
+        const it = ITEMS.get(el.dataset.id);
+        const hit = !nq || norm(`${it.name} ${it.description} ${it.cat} ${it.subgroup || ""}`).includes(nq);
+        el.hidden = !hit;
+        secHas = secHas || hit;
+      });
+      $$(".group", sec).forEach((g) => {
+        const has = !!g.querySelector("[data-id]:not([hidden])");
+        // Pizzas: sin búsqueda se ve solo la pestaña elegida; buscando, todos los grupos con resultados.
+        g.hidden = g.classList.contains("pz-panel") ? (nq ? !has : !g.classList.contains("current")) : !has;
+        const prev = g.previousElementSibling;
+        if (prev && prev.classList.contains("subgroup")) prev.hidden = !has;
       });
       sec.hidden = !secHas;
       any = any || secHas;
     });
     $$(".divider", menuEl).forEach((d) => (d.hidden = !!nq));
-    $("#noResults").hidden = any;
+    const nr = $("#noResults");
+    if (nr) nr.hidden = any;
   }
+
+  // Guirnalda: copias enteras de punta a punta, sin deformar el dibujo.
+  (function fitLights() {
+    const g = $("#lights");
+    if (!g) return;
+    const RATIO = 1100 / 192;
+    const fit = () => {
+      const w = g.clientWidth;
+      if (!w) return;
+      const target = window.innerWidth <= 768 ? 30 : 52;
+      const n = Math.max(1, Math.round(w / (target * RATIO)));
+      const cw = w / n;
+      g.style.backgroundSize = `${cw}px ${cw / RATIO}px`;
+      g.style.height = `${cw / RATIO}px`;
+    };
+    if ("ResizeObserver" in window) new ResizeObserver(fit).observe(g);
+    else window.addEventListener("resize", fit);
+    fit();
+  })();
 
   /* ───────────────────── DIÁLOGOS ───────────────────── */
 
@@ -754,7 +1120,7 @@
     const last = !againDismissed && state.lines.length === 0 ? loadLastOrder() : null;
     card.hidden = !last;
     if (!last) return;
-    const names = last.lines.map((l) => `${l.qty}× ${lineTitle(l)}${l.size && !l.halfId ? " " + sizeName(l.size).toLowerCase() : ""}`);
+    const names = last.lines.map((l) => `${l.qty}× ${lineTitle(l)}${l.size && !l.halfId ? " " + sizeLow(l.size) : ""}`);
     const shown = names.slice(0, 4).join(" · ") + (names.length > 4 ? ` y ${names.length - 4} más` : "");
     let when = "";
     try { when = new Date(last.at).toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "numeric" }); } catch (_) { /* fecha opcional */ }
@@ -871,15 +1237,26 @@
   let upsellPicks = [];
   let upsellStartCount = 0;
 
+  // "Coca Común 1L" → { it: Coca Común, size: "1 L" }; "Limonada" → { it: Limonada, size: su único precio }.
+  const squash = (t) => norm(t).replace(/[^a-z0-9]/g, "");
+  function findSuggestion(text) {
+    const want = squash(text);
+    for (const it of ITEMS.values()) {
+      if (squash(it.name) === want) return { it, size: (it.prices[0] && it.prices[0].label) || null };
+      const p = it.prices.find((x) => x.label && squash(it.name + x.label) === want);
+      if (p) return { it, size: p.label };
+    }
+    return null;
+  }
+
   function suggestionPicks() {
     const inCart = new Set(state.lines.map((l) => ITEMS.get(l.itemId).cat));
-    const all = Array.from(ITEMS.values());
     const candidates = (CFG.suggestions || [])
-      .map((name) => all.find((it) => it.name === name))
-      .filter((it) => it && !inCart.has(it.cat));
+      .map(findSuggestion)
+      .filter((s) => s && !inCart.has(s.it.cat));
     // Alternar categorías: si faltan bebida y postre, mostrar de las dos.
     const byCat = new Map();
-    candidates.forEach((it) => { if (!byCat.has(it.cat)) byCat.set(it.cat, []); byCat.get(it.cat).push(it); });
+    candidates.forEach((s) => { if (!byCat.has(s.it.cat)) byCat.set(s.it.cat, []); byCat.get(s.it.cat).push(s); });
     const picks = [];
     for (let round = 0; picks.length < 3 && round < 5; round++) {
       for (const group of byCat.values()) if (group[round] && picks.length < 3) picks.push(group[round]);
@@ -892,10 +1269,10 @@
     if (!upsellPicks.length) return false;
     upsellShown = true;
     upsellStartCount = itemCount();
-    const cats = new Set(upsellPicks.map((it) => it.cat));
+    const cats = new Set(upsellPicks.map((s) => s.it.cat));
     $("#upsellDesc").textContent = cats.size > 1
       ? "¿Una bebida o un postre para acompañar?"
-      : upsellPicks[0].layout === "postre-cards" ? "¿Un postre para cerrar?" : "¿Algo para tomar?";
+      : upsellPicks[0].it.layout === "bebidas-grid" ? "¿Algo para tomar?" : "¿Un postre para cerrar?";
     renderUpsellRows();
     openDialog(upsellSheet, () => setStep("review"));
     return true;
@@ -904,16 +1281,16 @@
   function renderUpsellRows() {
     const list = $("#upsellList");
     list.textContent = "";
-    upsellPicks.forEach((it) => {
-      const size = (it.prices[0] && it.prices[0].label) || null;
-      const n = plainLines(it.id, size).reduce((s, l) => s + l.qty, 0);
+    upsellPicks.forEach(({ it, size }) => {
+      const n = plainCount(it.id, size);
       const add = () => {
         addLine({ itemId: it.id, name: it.name, size, halfId: null, extras: [], notes: "", qty: 1 });
         changed();
         renderUpsellRows();
       };
+      const label = it.prices.length > 1 && size ? `${it.name} ${sizeName(size)}` : it.name;
       list.appendChild(h("div", { class: "upsell-row" + (n ? " added" : "") },
-        h("span", { class: "ur-text" }, h("b", { text: it.name }), h("span", { class: "ur-price", text: money(priceFor(it, size)) })),
+        h("span", { class: "ur-text" }, h("b", { text: label }), h("span", { class: "ur-price", text: money(priceFor(it, size)) })),
         n > 0
           ? h("div", { class: "qty-group", role: "group", "aria-label": `${it.name}: ${n} en tu pedido` },
               h("button", { type: "button", "aria-label": `Restar un ${it.name}`, text: "−", onclick: () => { quickRemove(it, size); renderUpsellRows(); } }),
@@ -1312,6 +1689,7 @@
       prepare(mods);
       restore();
       renderMenu();
+      applySearch($("#search").value);
       updateBar();
       renderAgain();
     })

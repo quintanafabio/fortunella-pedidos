@@ -42,9 +42,10 @@ window.FORTUNELLA_CONFIG = {
   // Minutos mínimos entre el pedido y el primer horario de retiro que se ofrece.
   pickupLeadMinutes: 30,
 
-  // Sugerencias del carrito ("¿Le sumás algo?"), por nombre exacto del producto.
+  // Sugerencias de "¿Le sumás algo?", por nombre del producto (y tamaño si tiene varios: "Coca Común 1L").
   // Se muestran las de bebidas o postres si el pedido todavía no tiene de esa categoría.
-  suggestions: ["Coca Común 1,5L", "Coca Zero 1,5L", "Corona 710ml", "Tiramisú", "Flan"],
+  // Si un nombre cambia en data/menu.js, esa sugerencia deja de aparecer (no rompe nada).
+  suggestions: ["Coca Común 1L", "Coca Zero 1L", "Limonada", "El famoso tiramisu de fortu", "Flan Casero con DDL y crema"],
 
   // Opcional: leer la carta en vivo desde Supabase (la misma base que usa el panel admin
   // de la carta original). Si queda vacío, se usa data/menu.js.

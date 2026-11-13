@@ -4,81 +4,83 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0F2560">
-<meta name="description" content="Carta de Fortunella Pizzas, La Rioja. Armá tu pedido y envialo por WhatsApp.">
-<title>Fortunella Pizzas — Pedí online</title>
+<meta name="description" content="Carta de Patio Fortunella, La Rioja. Armá tu pedido y envialo por WhatsApp.">
+<title>Patio Fortunella — Pedí online</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Bebas+Neue&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=8">
+<link rel="stylesheet" href="css/styles.css?v=9">
 </head>
-<body>
+<body class="verano">
 
-<header class="hero">
-  <div class="hero-inner">
-    <div class="hero-text">
-      <h1 class="hero-name">
-        <svg class="leaf left" viewBox="0 0 24 38" aria-hidden="true"><g transform="rotate(-12 12 38)"><path d="M12 36 C11 28 10 18 13 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M12 31 C5 30 1 23 5 18 C8 23 10 28 12 31Z"/><path d="M12 31 C18 28 20 22 17 17 C14 22 13 27 12 31Z"/><path d="M12 23 C5 21 2 14 6 10 C9 15 11 20 12 23Z"/><path d="M12 23 C18 20 21 14 17 10 C14 15 13 20 12 23Z"/><path d="M13 15 C7 13 5 7 9 4 C11 8 12 12 13 15Z"/><path d="M13 15 C18 12 19 6 16 4 C13 8 13 12 13 15Z"/><path d="M13 5 C10 2 11 0 13 0 C15 0 15 2 13 5Z"/></g></svg>Fortunella<svg class="leaf right" viewBox="0 0 24 38" aria-hidden="true"><g transform="rotate(12 12 38)"><path d="M12 36 C13 28 14 18 11 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M12 31 C5 28 3 22 7 17 C10 22 11 27 12 31Z"/><path d="M12 31 C19 30 23 23 19 18 C16 23 14 28 12 31Z"/><path d="M12 23 C6 20 3 14 7 10 C10 15 11 20 12 23Z"/><path d="M12 23 C18 21 21 14 18 10 C15 15 13 20 12 23Z"/><path d="M11 15 C6 12 5 6 8 4 C10 8 11 12 11 15Z"/><path d="M11 15 C17 13 19 7 16 4 C14 8 12 12 11 15Z"/><path d="M11 5 C9 2 9 0 11 0 C13 0 13 2 11 5Z"/></g></svg>
-      </h1>
-      <div class="hero-sub">Pizzas</div>
-      <div class="hero-est">La Rioja, Argentina · Est. 2020</div>
-      <p class="status" id="storeStatus" hidden></p>
-      <ul class="facts">
-        <li><b>Masa madre</b><span>24 h de fermentación</span></li>
-        <li><b>Horno de barro</b><span>Cocción a 400°</span></li>
-        <li><b>Ingredientes frescos</b><span>Productores locales</span></li>
-      </ul>
-    </div>
-    <img class="hero-pizza" src="img/pizza.png" alt="" width="520" height="603">
-  </div>
-  <div class="banner">
-    <p class="banner-title">Menú Noche a la Carta</p>
-    <p class="banner-sub">Armá tu pedido · Delivery o retiro · Lo enviás por WhatsApp</p>
-  </div>
-</header>
+<div class="page">
+<div class="page-inner">
 
-<nav class="cats" aria-label="Categorías">
-  <div class="cats-scroll" id="cats"></div>
+  <!-- Toldo + luces -->
+  <img class="v-awning" src="assets/patio/techito.webp" alt="" aria-hidden="true" width="1200" height="151">
+  <div class="v-lights" id="lights" aria-hidden="true"></div>
+
+  <header class="v-hero">
+    <h1 class="v-title">
+      <span class="v-patio">Patio</span>
+      <span class="hero-name"><svg class="hero-leaf left" viewBox="0 0 24 38" aria-hidden="true"><g transform="rotate(-12 12 38)"><path d="M12 36 C11 28 10 18 13 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M12 31 C5 30 1 23 5 18 C8 23 10 28 12 31Z"/><path d="M12 31 C18 28 20 22 17 17 C14 22 13 27 12 31Z"/><path d="M12 23 C5 21 2 14 6 10 C9 15 11 20 12 23Z"/><path d="M12 23 C18 20 21 14 17 10 C14 15 13 20 12 23Z"/><path d="M13 15 C7 13 5 7 9 4 C11 8 12 12 13 15Z"/><path d="M13 15 C18 12 19 6 16 4 C13 8 13 12 13 15Z"/><path d="M13 5 C10 2 11 0 13 0 C15 0 15 2 13 5Z"/></g></svg>Fortunella<svg class="hero-leaf right" viewBox="0 0 24 38" aria-hidden="true"><g transform="rotate(12 12 38)"><path d="M12 36 C13 28 14 18 11 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M12 31 C5 28 3 22 7 17 C10 22 11 27 12 31Z"/><path d="M12 31 C19 30 23 23 19 18 C16 23 14 28 12 31Z"/><path d="M12 23 C6 20 3 14 7 10 C10 15 11 20 12 23Z"/><path d="M12 23 C18 21 21 14 18 10 C15 15 13 20 12 23Z"/><path d="M11 15 C6 12 5 6 8 4 C10 8 11 12 11 15Z"/><path d="M11 15 C17 13 19 7 16 4 C14 8 12 12 11 15Z"/><path d="M11 5 C9 2 9 0 11 0 C13 0 13 2 11 5Z"/></g></svg></span>
+    </h1>
+    <p class="v-tagline">Un manjar en el patio</p>
+    <img class="v-bondi" src="assets/patio/bondi.webp" alt="Ilustración del patio de Fortunella con el bondi y las luces" width="640" height="303">
+    <p class="v-facts">Masa madre <span>✦</span> Horno de barro <span>✦</span> Ingredientes frescos</p>
+    <p class="status" id="storeStatus" hidden></p>
+    <p class="v-howto">Armá tu pedido · Delivery o retiro · Lo enviás por WhatsApp</p>
+  </header>
+
+  <!-- Secciones (las arma js/app.js al cargar la carta) -->
+  <nav class="v-nav" id="cats" aria-label="Secciones de la carta"></nav>
+
   <label class="search">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input id="search" type="search" placeholder="Buscar en la carta" autocomplete="off" aria-label="Buscar en la carta">
   </label>
-</nav>
 
-<!-- Repetir el último pedido -->
-<section class="again" id="againCard" aria-labelledby="againTitle" hidden>
-  <div class="again-head">
-    <h2 id="againTitle">¿Lo mismo que la última vez?</h2>
-    <button type="button" class="icon-btn" id="againClose" aria-label="Ocultar">×</button>
-  </div>
-  <p class="again-items" id="againItems"></p>
-  <button type="button" class="btn primary" id="againBtn">Pedir lo mismo · <span id="againTotal"></span></button>
-</section>
-
-<main id="menu" class="menu" aria-live="polite">
-  <p class="loading">Cargando carta…</p>
-</main>
-
-<footer class="footer">
-  <div class="also">
-    <p class="also-title">✦ También podés pedir ✦</p>
-    <p class="also-items">Mitad y mitad en pizzas grandes · Ingredientes adicionales (aclaralo en tu pedido) · Empanadas mixtas</p>
-  </div>
-  <div class="footer-info-grid">
-    <div>
-      <p class="fi-title">Horarios</p>
-      <ul class="fi-hours" id="footerHours"></ul>
+  <!-- Repetir el último pedido -->
+  <section class="again" id="againCard" aria-labelledby="againTitle" hidden>
+    <div class="again-head">
+      <h2 id="againTitle">¿Lo mismo que la última vez?</h2>
+      <button type="button" class="icon-btn" id="againClose" aria-label="Ocultar">×</button>
     </div>
-    <div>
-      <p class="fi-title">Dónde estamos</p>
-      <a class="fi-map" id="footerMap" href="#" target="_blank" rel="noopener"></a>
+    <p class="again-items" id="againItems"></p>
+    <button type="button" class="btn primary" id="againBtn">Pedir lo mismo · <span id="againTotal"></span></button>
+  </section>
+
+  <main id="menu" class="menu" aria-live="polite">
+    <p class="loading">Cargando carta…</p>
+  </main>
+
+  <footer class="bottom-block">
+    <div class="also-ask">
+      <p class="also-ask-title">✦ También podés pedir ✦</p>
+      <p class="also-ask-items">Mitad y mitad en pizzas grandes · Ingredientes adicionales (aclaralo en tu pedido) · Pizza de molde · Empanadas mixtas</p>
     </div>
-  </div>
-  <div class="footer-row">
-    <span class="footer-logo">Fortunella</span>
-    <span class="footer-buen">¡buen provecho!</span>
-    <span class="footer-info">@fortunella.pizzas · La Rioja, Argentina</span>
-  </div>
-</footer>
+    <div class="footer-info-grid">
+      <div>
+        <p class="fi-title">Horarios</p>
+        <ul class="fi-hours" id="footerHours"></ul>
+      </div>
+      <div>
+        <p class="fi-title">Dónde estamos</p>
+        <a class="fi-map" id="footerMap" href="#" target="_blank" rel="noopener"></a>
+      </div>
+    </div>
+    <div class="footer">
+      <p class="footer-logo">Fortunella</p>
+      <p class="footer-buen">Gracias por confiar en nosotros</p>
+      <div class="footer-right">
+        <p class="footer-info">@fortunella.pizzas</p>
+        <p class="footer-info">La Rioja, Argentina · Est. 2020</p>
+      </div>
+    </div>
+  </footer>
+
+</div>
+</div>
 
 <!-- Barra del modo mitad y mitad -->
 <div class="half-bar" id="halfBar" role="status" aria-live="polite" hidden>
@@ -315,8 +317,8 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js?v=8"></script>
-<script src="data/menu.js?v=8"></script>
-<script src="js/app.js?v=8"></script>
+<script src="js/config.js?v=9"></script>
+<script src="data/menu.js?v=9"></script>
+<script src="js/app.js?v=9"></script>
 </body>
 </html>
