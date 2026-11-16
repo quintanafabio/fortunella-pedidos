@@ -110,7 +110,11 @@
 
   function prepare(modules) {
     const usedIds = new Set();
-    MODULES = joinBebidas(modules).map((mod) => {
+    // Productos marcados como "no disponible" en el panel no se muestran; una sección vacía tampoco.
+    const visible = modules
+      .map((m) => ({ ...m, items: (m.items || []).filter((it) => !it.hidden) }))
+      .filter((m) => m.items.length);
+    MODULES = joinBebidas(visible).map((mod) => {
       let secId = "s-" + slug(mod.name);
       while (usedIds.has(secId)) secId += "-2";
       usedIds.add(secId);
@@ -143,25 +147,33 @@
     });
   }
 
-  async function loadMenu() {
-    if (CFG.supabaseUrl && CFG.supabaseAnonKey) {
-      try {
-        const url = `${CFG.supabaseUrl.replace(/\/$/, "")}/rest/v1/modules?select=*,items(*)&menu=eq.${encodeURIComponent(CFG.menuName || "fortunella")}&order=position.asc`;
-        // Si la base tarda, se usa la copia de data/menu.js para no dejar la carta en blanco.
-        const ctrl = "AbortController" in window ? new AbortController() : null;
-        const timer = ctrl && setTimeout(() => ctrl.abort(), 6000);
-        const res = await fetch(url, { signal: ctrl && ctrl.signal, headers: { apikey: CFG.supabaseAnonKey, Authorization: `Bearer ${CFG.supabaseAnonKey}` } });
-        clearTimeout(timer);
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const data = await res.json();
-        if (Array.isArray(data) && data.length) {
-          return data.map((m) => ({ ...m, items: (m.items || []).slice().sort((a, b) => a.position - b.position) }));
-        }
-      } catch (e) {
-        console.warn("[fortunella] No se pudo leer Supabase, uso data/menu.js:", e.message);
-      }
+  async function fetchMenu(url, ms) {
+    const ctrl = "AbortController" in window ? new AbortController() : null;
+    const timer = ctrl && setTimeout(() => ctrl.abort(), ms);
+    try {
+      const res = await fetch(url, { cache: "no-cache", signal: ctrl && ctrl.signal });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if (!data || !Array.isArray(data.modules) || !data.modules.length) throw new Error("carta vacía");
+      return data.modules;
+    } finally {
+      clearTimeout(timer);
     }
-    if (window.FORTUNELLA_MENU && window.FORTUNELLA_MENU.modules) return window.FORTUNELLA_MENU.modules;
+  }
+
+  // La carta vive en data/menu.json del repo y la edita el panel (admin.html).
+  // Se lee primero de GitHub, así los cambios del panel se ven sin volver a publicar la página
+  // (GitHub tarda hasta 5 minutos en mostrarlos); si falla, se usa la copia publicada con la página.
+  async function loadMenu() {
+    const gh = CFG.github || {};
+    const path = gh.menuPath || "data/menu.json";
+    const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+    const sources = [];
+    if (gh.owner && gh.repo && !local) sources.push(`https://raw.githubusercontent.com/${gh.owner}/${gh.repo}/${gh.branch || "main"}/${path}`);
+    sources.push(path);
+    for (const url of sources) {
+      try { return await fetchMenu(url, 5000); } catch (e) { console.warn("[fortunella] No se pudo leer la carta de", url, e.message); }
+    }
     throw new Error("No hay datos de la carta");
   }
 

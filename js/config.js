@@ -49,12 +49,18 @@ window.FORTUNELLA_CONFIG = {
 
   // Sugerencias de "¿Le sumás algo?", por nombre del producto (y tamaño si tiene varios: "Coca Común 1L").
   // Se muestran las de bebidas o postres si el pedido todavía no tiene de esa categoría.
-  // Si un nombre cambia en data/menu.js, esa sugerencia deja de aparecer (no rompe nada).
+  // Si un nombre cambia en la carta, esa sugerencia deja de aparecer (no rompe nada).
   suggestions: ["Coca Común 1L", "Coca Zero 1L", "Limonada", "El famoso tiramisu de fortu", "Flan Casero con DDL y crema"],
 
-  // Opcional: leer la carta en vivo desde Supabase (la misma base que usa el panel admin
-  // de la carta original). Si queda vacío, se usa data/menu.js.
-  supabaseUrl: "",
-  supabaseAnonKey: "",
-  menuName: "fortunella",
+  // Repositorio de GitHub donde vive la carta (data/menu.json). Lo usan:
+  //  · la página, para leer los precios más recientes sin volver a publicarla;
+  //  · el panel (admin.html), para guardar los cambios.
+  // Si el repo se pasa a otra cuenta, cambiá owner/repo acá y volvé a configurar el acceso del panel.
+  github: {
+    owner: "quintanafabio",
+    repo: "fortunella-pedidos",
+    branch: "main",
+    menuPath: "data/menu.json",
+    keyPath: "data/admin-key.json", // llave del panel, cifrada con la contraseña
+  },
 };

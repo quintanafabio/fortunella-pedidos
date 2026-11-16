@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0F2560">
+<title>Panel | Patio Fortunella</title>
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Bebas+Neue&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css?v=11">
+<link rel="stylesheet" href="css/admin.css?v=11">
+</head>
+<body class="adm">
+
+<header class="adm-top">
+  <a class="adm-brand" href="./"><span class="adm-patio">Patio</span> Fortunella</a>
+  <span class="adm-tag">Panel</span>
+  <span class="adm-spacer"></span>
+  <a class="adm-link" href="./" target="_blank" rel="noopener">Carta ↗</a>
+  <button type="button" class="adm-link" id="logoutBtn" hidden>Salir</button>
+</header>
+
+<main class="adm-main">
+  <p class="adm-loading" id="bootMsg">Cargando…</p>
+
+  <!-- Entrar -->
+  <section class="adm-card adm-narrow" id="loginView" hidden>
+    <h1 class="adm-h1">Entrar al panel</h1>
+    <p class="adm-p">Desde acá se cambian los precios y productos de la carta.</p>
+    <form id="loginForm" novalidate>
+      <label class="lbl" for="loginPass">Contraseña</label>
+      <input id="loginPass" type="password" autocomplete="current-password" required>
+      <label class="adm-check"><input type="checkbox" id="loginRemember"> Recordarme en este dispositivo</label>
+      <p class="adm-error" id="loginError" hidden></p>
+      <button class="btn primary adm-full" type="submit" id="loginBtn">Entrar</button>
+    </form>
+    <button type="button" class="btn link adm-full" id="toSetup">Configurar el acceso (primera vez o llave vencida)</button>
+  </section>
+
+  <!-- Configurar el acceso -->
+  <section class="adm-card adm-narrow" id="setupView" hidden>
+    <h1 class="adm-h1">Configurar el acceso</h1>
+    <p class="adm-p">El panel guarda los cambios en GitHub, donde vive la página. Para eso necesita una
+      <b>llave de GitHub</b> (se crea una sola vez) y una <b>contraseña</b> que elegís vos. La llave queda guardada
+      cifrada con la contraseña: después, para entrar, alcanza con la contraseña.</p>
+    <ol class="adm-steps">
+      <li>Con la cuenta dueña del repo <b id="repoName"></b>, abrí
+        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">crear una llave (fine-grained token)</a>.</li>
+      <li>Nombre: <i>Panel Fortunella</i>. Vencimiento: el más largo que permita.</li>
+      <li>En <b>Repository access</b> elegí <b>Only select repositories</b> y marcá solo este repo.</li>
+      <li>En <b>Permissions → Repository permissions → Contents</b> elegí <b>Read and write</b>.</li>
+      <li>Tocá <b>Generate token</b>, copiá la llave y pegala acá abajo.</li>
+    </ol>
+    <form id="setupForm" novalidate>
+      <label class="lbl" for="setupToken">Llave de GitHub</label>
+      <input id="setupToken" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…" required>
+      <label class="lbl" for="setupPass">Contraseña del panel <span class="opt">(mínimo 10 caracteres)</span></label>
+      <input id="setupPass" type="password" autocomplete="new-password" minlength="10" required>
+      <label class="lbl" for="setupPass2">Repetí la contraseña</label>
+      <input id="setupPass2" type="password" autocomplete="new-password" minlength="10" required>
+      <p class="adm-error" id="setupError" hidden></p>
+      <button class="btn primary adm-full" type="submit" id="setupBtn">Guardar acceso y entrar</button>
+    </form>
+    <button type="button" class="btn link adm-full" id="toLogin" hidden>Volver a entrar con la contraseña</button>
+  </section>
+
+  <!-- Editor -->
+  <section id="editorView" hidden>
+    <div class="adm-toolbar">
+      <label class="search adm-search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="admSearch" type="search" placeholder="Buscar producto" autocomplete="off" aria-label="Buscar producto">
+      </label>
+      <p class="adm-meta" id="admMeta"></p>
+    </div>
+    <div id="sections"></div>
+  </section>
+</main>
+
+<!-- Barra de guardado -->
+<div class="adm-savebar" id="saveBar" hidden>
+  <span class="adm-save-text" id="saveText">Tenés cambios sin guardar</span>
+  <button type="button" class="btn ghost" id="discardBtn">Descartar</button>
+  <button type="button" class="btn primary" id="saveBtn">Guardar y publicar</button>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/config.js?v=11"></script>
+<script src="js/admin.js?v=11"></script>
+</body>
+</html>
