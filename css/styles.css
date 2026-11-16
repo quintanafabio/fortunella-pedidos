@@ -217,7 +217,7 @@ button { cursor: pointer; background: none; border: 0; }
 }
 .add-btn:hover { background: var(--blue); color: var(--cream); }
 .add-btn:hover .ab-price { color: #FFB08F; }
-.add-btn:active, .half-btn:active, .pick-btn:active, .cell-btn:active { transform: scale(0.97); }
+.add-btn:active, .half-btn:active, .pick-btn:active { transform: scale(0.97); }
 .ab-size { font-family: var(--cond); font-weight: 800; font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
 .ab-price { font-family: var(--display); font-size: 16px; letter-spacing: 0.04em; color: var(--orange); white-space: nowrap; }
 
@@ -255,7 +255,7 @@ button { cursor: pointer; background: none; border: 0; }
 .half-chosen .text-btn { color: var(--cream); padding: 6px 10px; }
 .half-chosen .text-btn:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 .item.half-first { border: 2px solid var(--blue); box-shadow: 4px 4px 0 var(--orange), 0 6px 22px rgba(15, 37, 96, 0.18); }
-.item.dim, .trow.dim { opacity: 0.32; }
+.item.dim { opacity: 0.32; }
 body.half-mode .section:not(:has(.item:not(.dim))) { opacity: .45; }
 
 /* ─── PIZZAS: pestañas con mini banners + fotos ─── */
@@ -291,42 +291,33 @@ body.searching .pz-panel-title { display: block; }
   background: rgba(251, 247, 238, 0.94); border: 1.5px solid var(--blue); border-radius: 999px; padding: 5px 16px 6px; white-space: nowrap;
 }
 
-/* ─── TABLAS: empanadas y bebidas ─── */
+/* ─── EMPANADAS Y BEBIDAS: recuadros con renglones ─── */
 .ptable-wrap { display: grid; grid-template-columns: minmax(0, 520px); justify-content: center; margin-top: 8px; }
 .ptable-card {
   background: var(--paper); border: var(--card-border); border-radius: var(--card-radius); box-shadow: var(--card-shadow);
   padding: 12px 14px 8px;
 }
 .ptable-title { font-family: var(--script); font-weight: 700; font-size: 24px; line-height: 1; color: var(--orange); text-align: center; margin-bottom: 8px; }
-.ptable { width: 100%; border-collapse: collapse; }
-.ptable thead th {
-  font-family: var(--display); font-weight: 400; font-size: 12px; letter-spacing: 0.1em; opacity: .6; text-align: center;
-  padding: 0 2px 6px; border-bottom: 1px dashed rgba(15, 37, 96, 0.18); white-space: nowrap;
+/* Renglón: nombre a la izquierda, botón "+ Agregar  $precio" a la derecha */
+.rows { display: flex; flex-direction: column; }
+.item.row {
+  flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; text-align: left;
+  padding: 9px 0; background: none; border: 0; border-bottom: 1px dashed rgba(15, 37, 96, 0.14);
+  border-radius: 0; box-shadow: none;
 }
-.ptable td, .ptable tbody th { padding: 6px 0; border-bottom: 0.5px solid rgba(15, 37, 96, 0.08); vertical-align: middle; }
-.ptable tbody tr:last-child > * { border-bottom: 0; }
-.t-name { text-align: left; font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: 0.06em; line-height: 1.1; }
-.t-name-in { display: flex; align-items: center; gap: 6px; }
-.t-minus {
-  width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: var(--cream); flex: none;
-  font-size: 18px; line-height: 1; display: grid; place-items: center;
-}
-.t-minus:hover { background: #142e74; }
-.trow.in-cart .t-name { color: var(--orange); }
-.t-cell { text-align: center; padding-left: 4px !important; white-space: nowrap; }
-.cell-btn {
-  position: relative; min-width: 54px; height: 34px; padding: 0 8px; border-radius: 999px;
-  background: rgba(204, 51, 0, 0.08); color: var(--orange); border: 1.5px solid transparent;
-  font-family: var(--display); font-size: 15px; letter-spacing: 0.04em;
-}
-.cell-btn:hover { border-color: var(--orange); }
-.cell-btn.on { background: var(--blue); color: var(--cream); }
-.cell-n {
-  position: absolute; top: -8px; right: -6px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px;
-  background: var(--orange); color: #fff; font-family: var(--cond); font-weight: 800; font-size: 12px; line-height: 19px; letter-spacing: 0;
-}
-.cell-n:empty { display: none; }
-.t-dash { opacity: .35; }
+.item.row:last-child { border-bottom: 0; }
+.item.row .item-name { flex: 1; min-width: 0; font-size: 17px; letter-spacing: 0.06em; }
+.item.row.in-cart { border-color: rgba(15, 37, 96, 0.14); box-shadow: none; }
+.item.row.in-cart .item-name { color: var(--orange); }
+.item.row .item-actions { width: auto; flex: none; margin: 0; padding: 0; flex-direction: row; gap: 6px; }
+.item.row .add-btn { width: auto; min-height: 38px; gap: 10px; padding: 0 14px; }
+.item.row .qty-group { width: 150px; min-height: 38px; }
+.item.row .qty-group button { height: 38px; }
+.item.row .item-halves { display: none; }
+/* Bebida con varios tamaños: nombre arriba, un botón por tamaño debajo */
+.item.row.multi { flex-direction: column; align-items: stretch; gap: 6px; }
+.item.row.multi .item-actions { width: 100%; }
+.item.row.multi .add-btn, .item.row.multi .qty-group { flex: 1 1 0; min-width: 0; width: auto; }
 .beb { columns: 2; column-gap: 16px; margin-top: 10px; }
 .beb > .ptable-card { break-inside: avoid; margin-bottom: 16px; display: block; }
 
@@ -701,6 +692,28 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
   font-family: var(--cond); font-weight: 800; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase;
 }
 
+/* Carta de día / de noche */
+.off-menu { display: none !important; }
+body.day-menu .divider, body.day-menu .v-nav { display: none; }
+.menu-switch {
+  max-width: 560px; margin: 16px auto 0; padding: 12px 12px 12px 14px; display: flex; align-items: center; gap: 12px;
+  background: var(--paper); border: var(--card-border); border-radius: var(--card-radius); box-shadow: var(--card-shadow);
+  scroll-margin-top: 70px;
+}
+.ms-icon { font-size: 26px; line-height: 1; flex: none; }
+.ms-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.ms-text b { font-family: var(--script); font-weight: 700; font-size: 24px; line-height: 1; color: var(--orange); }
+.ms-text span { font-size: 13.5px; opacity: .85; margin-top: 2px; }
+.ms-btn {
+  flex: none; min-height: 40px; padding: 0 14px; border-radius: 999px; background: var(--blue); color: var(--cream);
+  font-family: var(--cond); font-weight: 800; font-size: 13.5px; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.ms-btn:hover { background: #142e74; }
+@media (max-width: 420px) {
+  .menu-switch { flex-wrap: wrap; }
+  .ms-btn { flex: 1 1 100%; }
+}
+
 /* Repetir el último pedido: mismo marco que las tarjetas */
 .again {
   max-width: 560px; margin: 16px auto 0; padding: 14px 16px 16px; border-radius: var(--card-radius);
@@ -769,8 +782,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
   .cards:not(.has-desc):not(.pz) .add-btn { padding: 0 10px; }
   .beb { columns: 1; }
   .ptable-card { padding: 10px 10px 6px; }
-  .t-name { font-size: 15px; letter-spacing: .04em; }
-  .cell-btn { min-width: 48px; padding: 0 6px; font-size: 14px; }
+  .item.row .item-name { font-size: 15.5px; letter-spacing: .04em; }
+  .item.row .add-btn { padding: 0 12px; gap: 8px; }
+  .item.row .qty-group { width: 132px; }
+  .item.row.multi .ab-size { font-size: 12.5px; }
 }
 @media (max-width: 400px) {
   .hero-name { font-size: 54px; }

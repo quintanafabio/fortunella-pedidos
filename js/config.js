@@ -39,6 +39,11 @@ window.FORTUNELLA_CONFIG = {
   ],
   timeZone: "America/Argentina/Buenos_Aires",
 
+  // Carta de día: los fines de semana, hasta que abre la noche, solo se ofrecen estas secciones
+  // (por parte del nombre). Igual hay un botón para ver la carta de noche completa.
+  // null = siempre la carta completa.
+  dayMenu: { days: [6, 0], from: "06:00", until: "20:30", sections: ["empanada"] },
+
   // Minutos mínimos entre el pedido y el primer horario de retiro que se ofrece.
   pickupLeadMinutes: 30,
 

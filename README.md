@@ -13,6 +13,13 @@ El diseño, las ilustraciones y los productos siguen la carta del local: https:/
   sugerencias de "¿Le sumás algo?" y conexión opcional a Supabase.
 - `data/menu.js`: productos y precios, copiados de la carta del local.
 - `assets/patio/`: ilustraciones y fotos de la carta del local (toldo, guirnalda, bondi, secciones, pizzas).
+- `icons/`: ícono de la pestaña y de la pantalla de inicio (el bondi).
+
+## Carta de día
+
+Los fines de semana, hasta que abre la noche (20:30), se muestra solo la carta de día (empanadas), con un
+botón "Ver carta de noche" para ver todo. Se configura en `dayMenu` de `js/config.js` (días, horario y
+secciones). Si el pedido lleva cosas de la carta de noche, el mensaje de WhatsApp lo avisa.
 
 ## Cambiar precios
 

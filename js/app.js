@@ -354,15 +354,16 @@
       return;
     }
 
+    const rowSingle = card.classList.contains("row") && item.prices.length === 1;
     item.prices.forEach((p) => {
       const size = p.label || null;
       const n = plainCount(item.id, size);
-      const label = size ? sizeName(size) : "Agregar";
+      const label = size && !rowSingle ? sizeName(size) : "Agregar";
       const what = item.name + (size ? " " + sizeName(size) : "");
       if (n > 0) {
         box.appendChild(h("div", { class: "qty-group", role: "group", "aria-label": `${what}: ${n} en tu pedido` },
           h("button", { type: "button", "aria-label": `Restar un ${what}`, text: "−", onclick: () => quickRemove(item, size) }),
-          h("span", { class: "qg-label" }, h("b", { text: String(n) }), h("small", { text: size ? label : "en tu pedido" })),
+          h("span", { class: "qg-label" }, h("b", { text: String(n) }), rowSingle ? null : h("small", { text: size ? label : "en tu pedido" })),
           h("button", { type: "button", "aria-label": `Sumar un ${what}`, text: "+", onclick: () => quickAdd(item, size) })));
       } else {
         box.appendChild(h("button", { type: "button", class: "add-btn", "aria-label": `Agregar ${what}, ${money(p.value)}`, onclick: () => quickAdd(item, size) },
@@ -399,76 +400,30 @@
       : "";
   }
 
-  /* Tablas (empanadas, bebidas): cada precio es un botón; la cantidad se ve en el globito
-     y el "−" del renglón quita la última que agregaste. */
-  function priceTable(items, { title, columns, showHead }) {
-    const table = h("table", { class: "ptable" });
-    if (showHead && columns.length) {
-      table.appendChild(h("thead", null, h("tr", null, h("th", { scope: "col" }, h("span", { class: "sr-only", text: "Producto" })),
-        columns.map((c) => h("th", { scope: "col", text: c ? sizeName(c) : "" })))));
-    }
-    const body = h("tbody");
-    items.forEach((item) => {
-      const tr = h("tr", { class: "trow", dataset: { id: item.id } },
-        h("th", { scope: "row", class: "t-name" },
-          h("span", { class: "t-name-in" },
-            h("button", { type: "button", class: "t-minus", hidden: true, "aria-label": `Quitar un ${item.name}`, text: "−", onclick: () => rowRemove(item) }),
-            h("span", null, item.name, item.note ? h("small", { class: "item-note", text: " " + item.note }) : null))));
-      const single = item.prices.length === 1 && !columns.includes(item.prices[0].label || "");
-      if (single) {
-        const td = h("td", { class: "t-cell" }, cellBtn(item, item.prices[0]));
-        td.colSpan = Math.max(1, columns.length);
-        tr.appendChild(td);
-      } else {
-        columns.forEach((c) => {
-          const p = item.prices.find((x) => (x.label || "") === c);
-          tr.appendChild(h("td", { class: "t-cell" }, p ? cellBtn(item, p) : h("span", { class: "t-dash", "aria-hidden": "true", text: "—" })));
-        });
-      }
-      body.appendChild(tr);
-      renderRow(tr, item);
-    });
-    table.appendChild(body);
-    return h("div", { class: "ptable-card group" }, title ? h("p", { class: "ptable-title", text: title }) : null, table);
+  /* Renglones (empanadas, bebidas): nombre a la izquierda y botones "+ Agregar" con el precio.
+     Usan los mismos botones que las tarjetas (renderActions). */
+  function rowItem(item) {
+    const multi = item.prices.length > 1;
+    const only = !multi && item.prices[0] && item.prices[0].label;
+    const sizeNote = only && /^\d/.test(only) ? sizeName(only) : ""; // "Agua · 500 ml"
+    const row = h("div", { class: "item row" + (multi ? " multi" : ""), dataset: { id: item.id } },
+      h("h3", { class: "item-name" }, item.name,
+        sizeNote ? h("span", { class: "item-note", text: " · " + sizeNote }) : null,
+        item.note ? h("span", { class: "item-note", text: " " + item.note }) : null),
+      h("div", { class: "item-actions" }),
+      h("p", { class: "item-halves", hidden: true }));
+    renderActions(row, item);
+    return row;
   }
 
-  function cellBtn(item, p) {
-    const size = p.label || null;
-    return h("button", { type: "button", class: "cell-btn", dataset: { size: size || "" }, onclick: () => quickAdd(item, size) },
-      h("span", { text: money(p.value) }), h("b", { class: "cell-n", "aria-hidden": "true" }));
-  }
-
-  function renderRow(tr, item = ITEMS.get(tr.dataset.id)) {
-    let rowTotal = 0;
-    $$(".cell-btn", tr).forEach((b) => {
-      const size = b.dataset.size || null;
-      const n = plainCount(item.id, size);
-      rowTotal += n;
-      b.classList.toggle("on", n > 0);
-      $(".cell-n", b).textContent = n > 0 ? String(n) : "";
-      const what = item.name + (size ? " " + sizeName(size) : "");
-      b.setAttribute("aria-label", `Agregar ${what}, ${money(priceFor(item, size))}${n ? `. Tenés ${n} en tu pedido` : ""}`);
-    });
-    $(".t-minus", tr).hidden = rowTotal === 0;
-    tr.classList.toggle("in-cart", rowTotal > 0);
-    tr.classList.toggle("dim", !!halfFirst);
-    tr.inert = !!halfFirst;
-  }
-
-  function rowRemove(item) {
-    for (let i = state.lines.length - 1; i >= 0; i--) {
-      const l = state.lines[i];
-      if (l.itemId === item.id && !l.halfId) {
-        if (l.qty > 1) l.qty--; else state.lines.splice(i, 1);
-        changed();
-        return;
-      }
-    }
+  function rowList(items, title) {
+    return h("div", { class: "ptable-card group" },
+      title ? h("p", { class: "ptable-title", text: title }) : null,
+      h("div", { class: "rows" }, items.map(rowItem)));
   }
 
   function refreshCards() {
     $$(".item", menuEl).forEach((c) => renderActions(c));
-    $$(".trow", menuEl).forEach((r) => renderRow(r));
   }
 
   function afterAdd(line, msg) {
@@ -630,24 +585,12 @@
   function renderEmpanadas(section, mod) {
     // Si alguna trae descripción o adicionales, mejor en tarjetas.
     if (mod.items.some((i) => i.description || i.extras.length)) return renderList(section, mod);
-    const columns = [];
-    mod.items.forEach((i) => i.prices.forEach((p) => { if (!columns.includes(p.label || "")) columns.push(p.label || ""); }));
-    section.appendChild(h("div", { class: "ptable-wrap" }, priceTable(mod.items, { columns, showHead: columns.some(Boolean) })));
+    section.appendChild(h("div", { class: "ptable-wrap" }, rowList(mod.items)));
   }
 
   function renderBebidas(section, mod) {
     const wrap = h("div", { class: "beb" });
-    bySubgroup(mod.items).forEach((g) => {
-      const sized = g.items.filter((i) => i.sized);
-      const plain = g.items.filter((i) => !i.sized);
-      if (sized.length) {
-        const columns = [...new Set(sized.flatMap((i) => i.prices.map((p) => p.label)))].sort((a, b) => mlOf(a) - mlOf(b));
-        // Las que no tienen tamaño (ej. Limonada) van en la misma tabla, con el precio a lo ancho.
-        wrap.appendChild(priceTable(sized.concat(plain), { title: g.subgroup, columns, showHead: true }));
-      } else {
-        wrap.appendChild(priceTable(plain, { title: g.subgroup, columns: [], showHead: false }));
-      }
-    });
+    bySubgroup(mod.items).forEach((g) => wrap.appendChild(rowList(g.items, g.subgroup)));
     section.appendChild(wrap);
   }
 
@@ -747,6 +690,7 @@
     const nq = norm(q.trim());
     document.body.classList.toggle("searching", !!nq);
     let any = false;
+    let offHits = false; // resultados que existen pero en la carta oculta (noche)
     $$(".section", menuEl).forEach((sec) => {
       let secHas = false;
       $$("[data-id]", sec).forEach((el) => {
@@ -763,12 +707,71 @@
         if (prev && prev.classList.contains("subgroup")) prev.hidden = !has;
       });
       sec.hidden = !secHas;
-      any = any || secHas;
+      if (sec.classList.contains("off-menu")) offHits = offHits || (secHas && !!nq);
+      else any = any || secHas;
     });
     $$(".divider", menuEl).forEach((d) => (d.hidden = !!nq));
     const nr = $("#noResults");
-    if (nr) nr.hidden = any;
+    if (nr) {
+      nr.hidden = any;
+      nr.textContent = offHits ? "Eso está en la carta de noche: tocá “Ver carta de noche” arriba." : "No encontramos nada con ese nombre.";
+    }
   }
+
+  /* ───────────────────── CARTA DE DÍA / DE NOCHE ─────────────────────
+     Fines de semana, hasta que abre la noche: solo las secciones de la carta de día (empanadas).
+     Un botón permite ver la carta de noche completa. */
+  const DAY = CFG.dayMenu;
+  let viewChoice = null; // null = automático; "day" | "night" = lo eligió el cliente
+  const dayMatch = (mod) => (DAY.sections || []).some((s) => norm(mod.name).includes(norm(s)));
+  const secOf = (itemId) => itemId.split("/")[0];
+
+  function isDayTime() {
+    if (!DAY || !MODULES.some(dayMatch)) return false;
+    const t = weekNow();
+    const day = Math.floor(t / 1440) % 7;
+    const min = t % 1440;
+    return DAY.days.includes(day) && min >= toMin(DAY.from || "00:00") && min < toMin(DAY.until);
+  }
+  const currentView = () => (isDayTime() ? viewChoice || "day" : "night");
+
+  function applyView() {
+    if (!MODULES.length) return;
+    const dayTime = isDayTime();
+    const view = currentView();
+    document.body.classList.toggle("day-menu", view === "day");
+    MODULES.forEach((mod) => {
+      const off = view === "day" && !dayMatch(mod);
+      const sec = document.getElementById(mod.id);
+      if (sec) sec.classList.toggle("off-menu", off);
+      const chip = catsEl.querySelector(`[data-target="${CSS.escape(mod.id)}"]`);
+      if (chip) chip.classList.toggle("off-menu", off);
+    });
+    const box = $("#menuSwitch");
+    box.hidden = !dayTime;
+    if (dayTime) {
+      const day = view === "day";
+      $("#msIcon").textContent = day ? "☀" : "🌙";
+      $("#msTitle").textContent = day ? "Carta de día" : "Carta de noche";
+      $("#msText").textContent = day
+        ? "Los fines de semana al mediodía tenemos empanadas."
+        : `Se sirve desde las ${DAY.until} hs. Podés pedir igual para la noche.`;
+      $("#msBtn").textContent = day ? "Ver carta de noche" : "Volver a la carta de día";
+    }
+    applySearch($("#search").value);
+  }
+
+  $("#msBtn").addEventListener("click", () => {
+    viewChoice = currentView() === "day" ? "night" : "day";
+    applyView();
+    $("#menuSwitch").scrollIntoView({ block: "start", behavior: motionOk() ? "smooth" : "auto" });
+  });
+
+  // ¿El pedido lleva cosas de la carta de noche mientras rige la de día?
+  const hasNightItems = () => isDayTime() && state.lines.some((l) => {
+    const mod = MODULES.find((m) => m.id === secOf(l.itemId));
+    return mod && !dayMatch(mod);
+  });
 
   // Guirnalda: copias enteras de punta a punta, sin deformar el dibujo.
   (function fitLights() {
@@ -1093,7 +1096,11 @@
     else { map.removeAttribute("href"); link.removeAttribute("href"); }
     link.hidden = !store.address;
     renderStatus();
-    setInterval(renderStatus, 60000);
+    setInterval(() => {
+      renderStatus();
+      // Al pasar de la carta de día a la de noche (o al revés) se actualiza sola, salvo que el cliente haya elegido.
+      if (!viewChoice) applyView();
+    }, 60000);
   })();
 
   /* ───────────────────── REPETIR EL ÚLTIMO PEDIDO ───────────────────── */
@@ -1253,7 +1260,9 @@
     const inCart = new Set(state.lines.map((l) => ITEMS.get(l.itemId).cat));
     const candidates = (CFG.suggestions || [])
       .map(findSuggestion)
-      .filter((s) => s && !inCart.has(s.it.cat));
+      .filter((s) => s && !inCart.has(s.it.cat))
+      // Con la carta de día a la vista, no sugerir cosas de la carta de noche.
+      .filter((s) => { const sec = document.getElementById(secOf(s.it.id)); return !sec || !sec.classList.contains("off-menu"); });
     // Alternar categorías: si faltan bebida y postre, mostrar de las dos.
     const byCat = new Map();
     candidates.forEach((s) => { if (!byCat.has(s.it.cat)) byCat.set(s.it.cat, []); byCat.get(s.it.cat).push(s); });
@@ -1595,6 +1604,7 @@
     L.push("🍕 *NUEVO PEDIDO · FORTUNELLA*");
     L.push(`A nombre de: *${i.name}*`);
     if (st && !st.open) L.push("⏰ _Pedido hecho con el local cerrado, para cuando abran._");
+    if (hasNightItems()) L.push(`🌙 _Incluye productos de la carta de noche (desde las ${DAY.until} hs)._`);
     L.push("");
     L.push("*Detalle*");
     state.lines.forEach((l) => {
@@ -1678,7 +1688,7 @@
   });
 
   // Exponer para pruebas desde la consola.
-  window.Fortunella = { buildMessage, waUrl, state, storeState, pickupSlots };
+  window.Fortunella = { buildMessage, waUrl, state, storeState, pickupSlots, applyView, isDayTime };
 
   /* ───────────────────── INICIO ───────────────────── */
 
@@ -1689,7 +1699,7 @@
       prepare(mods);
       restore();
       renderMenu();
-      applySearch($("#search").value);
+      applyView(); // también aplica la búsqueda
       updateBar();
       renderAgain();
     })
