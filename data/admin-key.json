@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "kdf": "PBKDF2-SHA256",
+  "iter": 600000,
+  "salt": "VjRQdxYb/yIXeTSfdyyKQg==",
+  "iv": "WYW1tIV7PkWLvlGu",
+  "data": "Sozxi1L1K/qTCnmBnOWehtwnE6lfWcjtMxUG5TPQD8EJwGUFndxG84qjUAnuBeqXxHPP4c65X4Y2xrS2EAaYropmO5IzU75xG1vbNGh8HapC50PjX5qiaBzzuCz46vNuKd8GE/bfD/A/HGkK2A==",
+  "note": "Llave del panel de la carta, cifrada con la contraseña del panel. Sin la contraseña no sirve."
+}
