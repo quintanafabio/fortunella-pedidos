@@ -105,6 +105,17 @@ body.adm.has-savebar { padding-bottom: 96px; }
 .adm-item-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .adm-add { width: 100%; margin-top: 12px; border-style: dashed; }
 
+/* Datos del local */
+.adm-settings { border-color: var(--orange); }
+.adm-settings.flash { box-shadow: 0 0 0 3px var(--orange); }
+.adm-wa { margin-top: 12px; }
+.adm-phone-row { display: flex; align-items: center; gap: 8px; }
+.adm-prefix { font-family: var(--display); font-size: 19px; letter-spacing: .03em; white-space: nowrap; }
+.adm .adm-phone { flex: 1; min-width: 0; font-family: var(--display); font-size: 19px; letter-spacing: .06em; }
+.adm-phone-row .adm-mini { text-decoration: none; white-space: nowrap; }
+.adm-help { font-size: 12.5px; opacity: .75; }
+.adm-help.bad-text { color: var(--orange); opacity: 1; font-weight: 600; }
+
 /* Barra de guardado */
 .adm-savebar {
   position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom));

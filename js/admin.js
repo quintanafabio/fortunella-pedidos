@@ -258,7 +258,78 @@
   };
   const usesGroups = (mod) => mod.layout_type === "pizza-grid" || mod.layout_type === "bebidas-grid" || mod.items.some((i) => i.subgroup);
 
+  const secs = () => $$(".adm-sec", $("#sections")); // secciones de la carta (sin "Datos del local")
+
+  /* Datos del local: WhatsApp y transferencia. Se guardan en data.settings (dentro de data/menu.json);
+     mientras no se cargaron desde acá, se muestran los de js/config.js. */
+  // Acepta el número como lo escriba la gente ("+54 9 380 462-6870", "(0380) 15 462-6870", "3804626870")
+  // y devuelve los 10 números de característica + número, sin 0 ni 15.
+  function localPhone(raw) {
+    let d = String(raw || "").replace(/\D/g, "");
+    if (d.startsWith("549")) d = d.slice(3);
+    else if (d.startsWith("54") && d.length > 11) d = d.slice(2);
+    d = d.replace(/^0/, "");
+    if (d.length === 12) {
+      for (const i of [3, 2, 4]) { // característica de 3 (380), 2 (11) o 4 números
+        if (d.substr(i, 2) === "15") { d = d.slice(0, i) + d.slice(i + 2); break; }
+      }
+    }
+    return d;
+  }
+  const prettyPhone = (d) => `+54 9 ${d.slice(0, 3)} ${d.slice(3, 6)}-${d.slice(6)}`;
+  function defaultSettings() {
+    const tr = CFG.transfer || {};
+    return { whatsapp: String(CFG.whatsapp || ""), transfer: { alias: tr.alias || "", holder: tr.holder || "", cuit: tr.cuit || "", bank: tr.bank || "" } };
+  }
+  function ensureSettings() {
+    if (!data.settings) data.settings = defaultSettings();
+    if (!data.settings.transfer) data.settings.transfer = { alias: "", holder: "", cuit: "", bank: "" };
+    return data.settings;
+  }
+  function renderSettings() {
+    const box = $("#settingsBox");
+    const wasOpen = box.open;
+    box.textContent = "";
+    const s = data.settings || defaultSettings();
+    const tr = s.transfer || {};
+    const waLink = (d) => `https://wa.me/549${d}`;
+    const test = h("a", { class: "adm-mini", href: waLink(localPhone(s.whatsapp)), target: "_blank", rel: "noopener", text: "Probar ↗", title: "Abre un chat con ese número para confirmar que es el correcto" });
+    const help = h("span", { class: "adm-help" });
+    const showHelp = (d) => {
+      help.textContent = d.length === 10 ? `Los pedidos van a llegar al ${prettyPhone(d)}.` : "Característica sin 0 y número sin 15 (10 números en total, ej. 3804626870).";
+      help.classList.toggle("bad-text", d.length !== 10);
+    };
+    const phone = h("input", { type: "text", inputmode: "tel", autocomplete: "off", class: "adm-phone", value: localPhone(s.whatsapp), placeholder: "3804626870", "aria-label": "WhatsApp: característica sin 0 y número sin 15",
+      oninput: (e) => {
+        const d = localPhone(e.target.value);
+        e.target.classList.toggle("bad", d.length !== 10);
+        showHelp(d);
+        test.href = waLink(d);
+        ensureSettings().whatsapp = "549" + d;
+        changed();
+      },
+      onblur: (e) => { const d = localPhone(e.target.value); if (d.length === 10) e.target.value = d; } });
+    showHelp(localPhone(s.whatsapp));
+    const trField = (label, key, placeholder) => field(label, h("input", { type: "text", value: tr[key] || "", placeholder: placeholder || "", autocomplete: "off",
+      oninput: (e) => { ensureSettings().transfer[key] = e.target.value; if (key === "alias") e.target.classList.toggle("bad", !e.target.value.trim()); changed(); } }));
+    box.append(
+      h("summary", null, h("span", { class: "adm-sec-name", text: "Datos del local" }), h("span", { class: "adm-sec-count", text: "WhatsApp y transferencia" })),
+      h("div", { class: "adm-sec-body" },
+        h("p", { class: "adm-hint", text: "A este WhatsApp llegan los pedidos. Los datos de transferencia se muestran cuando el cliente elige pagar con transferencia." }),
+        h("div", { class: "adm-field adm-wa" },
+          h("span", { class: "adm-lbl", text: "WhatsApp que recibe los pedidos" }),
+          h("div", { class: "adm-phone-row" }, h("span", { class: "adm-prefix", text: "+54 9" }), phone, test),
+          help),
+        h("div", { class: "adm-grid2" },
+          trField("Alias", "alias", "FORTUNELLAPIZZAS"),
+          trField("Titular de la cuenta", "holder"),
+          trField("CUIT/CUIL", "cuit"),
+          trField("Banco o billetera", "bank", "Mercado Pago"))));
+    box.open = wasOpen;
+  }
+
   function renderEditor() {
+    renderSettings();
     const wrap = $("#sections");
     wrap.textContent = "";
     $("#admMeta").textContent = `${data.modules.reduce((s, m) => s + m.items.length, 0)} productos · última actualización: ${data.updated || "—"}`;
@@ -357,18 +428,18 @@
     if (tpl && tpl.subgroup) it.subgroup = tpl.subgroup;
     mod.items.push(it);
     rerender(mi);
-    const cards = $$(".adm-sec")[mi].querySelectorAll(".adm-item");
+    const cards = secs()[mi].querySelectorAll(".adm-item");
     const last = cards[cards.length - 1];
     last.scrollIntoView({ block: "center", behavior: "smooth" });
     last.querySelector(".adm-name").focus({ preventScroll: true });
   }
   // Vuelve a dibujar manteniendo abiertas las secciones que estaban abiertas.
   function rerender(openIndex) {
-    const open = $$(".adm-sec").map((d) => d.open);
+    const open = secs().map((d) => d.open);
     if (openIndex != null) open[openIndex] = true;
     const y = window.scrollY;
     renderEditor();
-    $$(".adm-sec").forEach((d, i) => (d.open = !!open[i]));
+    secs().forEach((d, i) => (d.open = !!open[i]));
     window.scrollTo(0, y);
     changed();
   }
@@ -382,7 +453,8 @@
 
   function applyFilter() {
     const q = norm($("#admSearch").value.trim());
-    $$(".adm-sec").forEach((sec) => {
+    $("#settingsBox").hidden = !!q;
+    secs().forEach((sec) => {
       let any = false;
       $$(".adm-item", sec).forEach((c) => {
         const hit = !q || c.dataset.name.includes(q);
@@ -397,6 +469,11 @@
 
   // Antes de guardar: nombres y precios completos.
   function firstProblem() {
+    if (data.settings) {
+      const s = data.settings;
+      if (!/^549\d{10}$/.test(s.whatsapp || "")) return { settings: true, msg: "El WhatsApp tiene que tener 10 números: característica sin 0 y número sin 15 (ej. 3804626870)." };
+      if (!String((s.transfer || {}).alias || "").trim()) return { settings: true, msg: "Falta el alias para transferencias." };
+    }
     for (const [mi, mod] of data.modules.entries()) {
       if (!mod.name.trim()) return { mi, msg: "Hay una sección sin nombre." };
       for (const [ii, it] of mod.items.entries()) {
@@ -411,7 +488,14 @@
     const prob = firstProblem();
     if (prob) {
       toast("⚠ " + prob.msg, 5000);
-      const sec = $$(".adm-sec")[prob.mi];
+      if (prob.settings) {
+        const box = $("#settingsBox");
+        box.hidden = false; box.open = true;
+        box.scrollIntoView({ block: "start", behavior: "smooth" });
+        box.classList.add("flash"); setTimeout(() => box.classList.remove("flash"), 1600);
+        return;
+      }
+      const sec = secs()[prob.mi];
       if (sec) {
         sec.hidden = false; sec.open = true;
         const card = prob.ii != null ? sec.querySelectorAll(".adm-item")[prob.ii] : sec;
@@ -428,6 +512,10 @@
         return;
       }
       data.modules.forEach((m) => m.items.forEach((it) => { it.name = it.name.trim(); }));
+      if (data.settings && data.settings.transfer) {
+        const tr = data.settings.transfer;
+        Object.keys(tr).forEach((k) => { tr[k] = String(tr[k] || "").trim(); });
+      }
       data.updated = new Date().toISOString().slice(0, 10);
       const text = JSON.stringify(data, null, 2) + "\n";
       menuSha = await putFile(GH.menuPath, text, menuSha, `Carta: cambios desde el panel (${data.updated})`);

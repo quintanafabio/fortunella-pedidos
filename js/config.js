@@ -1,8 +1,9 @@
 // Configuración del pedido online de Fortunella.
 window.FORTUNELLA_CONFIG = {
   // Número de WhatsApp que recibe los pedidos, en formato internacional sin "+" ni espacios.
-  // En Argentina los celulares llevan un 9 después del 54: +54 9 380 439-9338.
-  whatsapp: "5493804399338",
+  // En Argentina los celulares llevan un 9 después del 54: +54 9 380 462-6870.
+  // Si se cambia desde el panel ("Datos del local"), manda el del panel (queda en data/menu.json).
+  whatsapp: "5493804626870",
 
   // Cómo se cobra una pizza mitad y mitad: "max" = precio de la mitad más cara,
   // "avg" = promedio de ambas mitades.
@@ -18,6 +19,7 @@ window.FORTUNELLA_CONFIG = {
   paymentMethods: ["Efectivo", "Transferencia"],
 
   // Datos que se muestran al elegir "Transferencia" (null para no mostrarlos).
+  // También se editan desde el panel; si están cargados ahí, mandan los del panel.
   transfer: {
     alias: "FORTUNELLAPIZZAS",
     holder: "MARÍA BELEN HASSAN",

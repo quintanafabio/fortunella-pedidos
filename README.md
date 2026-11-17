@@ -25,6 +25,10 @@ producto como **no disponible** (por ejemplo, sin stock: deja de aparecer en la 
 Al tocar **Guardar y publicar**, el cambio se guarda en GitHub y la carta lo muestra en unos minutos
 (hasta 5), en los dos links, sin volver a publicar la página.
 
+Arriba de todo está **Datos del local**: el WhatsApp que recibe los pedidos y los datos para transferir
+(alias, titular, CUIT/CUIL, banco). Se guardan en `data/menu.json` (`settings`) y mandan sobre los de
+`js/config.js`, que quedan como respaldo.
+
 **Primera vez (configurar el acceso):** el panel guarda en GitHub, así que necesita una llave de la
 cuenta dueña del repo. La pantalla explica los pasos:
 

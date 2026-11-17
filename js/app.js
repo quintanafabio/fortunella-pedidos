@@ -155,7 +155,7 @@
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       if (!data || !Array.isArray(data.modules) || !data.modules.length) throw new Error("carta vacía");
-      return data.modules;
+      return data;
     } finally {
       clearTimeout(timer);
     }
@@ -175,6 +175,18 @@
       try { return await fetchMenu(url, 5000); } catch (e) { console.warn("[fortunella] No se pudo leer la carta de", url, e.message); }
     }
     throw new Error("No hay datos de la carta");
+  }
+
+  // "Datos del local" del panel (WhatsApp y transferencia): si están en la carta, reemplazan a config.js.
+  function applySettings(s) {
+    if (!s || typeof s !== "object") return;
+    const wa = String(s.whatsapp || "").replace(/\D/g, "");
+    if (/^\d{11,15}$/.test(wa)) CFG.whatsapp = wa;
+    const tr = s.transfer;
+    if (tr && typeof tr === "object" && String(tr.alias || "").trim()) {
+      CFG.transfer = {};
+      ["alias", "holder", "cuit", "bank"].forEach((k) => { if (String(tr[k] || "").trim()) CFG.transfer[k] = String(tr[k]).trim(); });
+    }
   }
 
   /* ───────────────────── ESTADO ───────────────────── */
@@ -1380,7 +1392,7 @@
   })();
 
   // Datos de transferencia
-  (function setupTransfer() {
+  function setupTransfer() {
     const tr = CFG.transfer;
     if (!tr) return;
     $("#trAlias").textContent = tr.alias;
@@ -1403,7 +1415,7 @@
       btn.classList.toggle("done", ok);
       setTimeout(() => { btn.textContent = "Copiar"; btn.classList.remove("done"); }, 2200);
     });
-  })();
+  }
 
   function transferText(forSent) {
     const tr = CFG.transfer;
@@ -1707,8 +1719,10 @@
   $("#search").addEventListener("input", (e) => applySearch(e.target.value));
 
   loadMenu()
-    .then((mods) => {
-      prepare(mods);
+    .then((data) => {
+      applySettings(data.settings);
+      setupTransfer();
+      prepare(data.modules);
       restore();
       renderMenu();
       applyView(); // también aplica la búsqueda
